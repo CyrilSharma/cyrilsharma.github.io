@@ -73,7 +73,9 @@ def main(argv) -> int:
   for src in args.files:
     path = Path(src)
     slug = path.stem
-    meta[slug] = query_frontmatter(path, root, args.features)
+    entry = query_frontmatter(path, root, args.features)
+    entry["local"] = "local/article" in path.as_posix()
+    meta[slug] = entry
 
   # Add any manual/generated HTML folders not covered by Typst sources.
   html_dir = Path(args.html_dir)

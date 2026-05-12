@@ -1,0 +1,64 @@
+---
+import BaseHead from "$components/BaseHead.astro";
+import SiteHeader from "$components/SiteHeader.astro";
+import PostGrid from "$components/PostGrid.astro";
+import { SITE_TITLE, SITE_DESCRIPTION, BASE_PATH } from "$consts";
+import { getPostList } from "../utils";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
+
+interface Props {
+  heading?: string;
+  description?: string;
+  tag?: string;
+  excludeTag?: string;
+  local?: boolean;
+}
+
+const { heading = SITE_TITLE, description = SITE_DESCRIPTION, tag, excludeTag, local } = Astro.props;
+
+let sharedStyles = "";
+try {
+  const sample = readFileSync(resolve("html", "agency", "index.html"), "utf-8");
+  sharedStyles = [...sample.matchAll(/<style[\s\S]*?<\/style>/gi)]
+    .map((m) => m[0]).join("\n");
+} catch {}
+
+const posts = await getPostList({ tag, excludeTag, local });
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <BaseHead title={heading} description={description} />
+    <Fragment set:html={sharedStyles} />
+    <style>
+      main {
+        max-width: 860px;
+        margin: 0 auto;
+        padding: 0.75rem 1.5rem 4rem;
+      }
+      h1 {
+        margin: 0 0 0.2em 0;
+        font-size: 3.2rem;
+        color: #c4874a;
+        text-align: center;
+      }
+      p.lead {
+        margin: 0 0 2rem 0;
+        color: #7a5540;
+        font-size: 1.05rem;
+        letter-spacing: 0.01em;
+        text-align: center;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <SiteHeader />
+      <h1>{heading}</h1>
+      {description && <p class="lead">{description}</p>}
+      <PostGrid posts={posts} basePath={BASE_PATH} />
+    </main>
+  </body>
+</html>

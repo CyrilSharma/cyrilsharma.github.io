@@ -1,0 +1,55 @@
+---
+import { BASE_PATH } from "$consts";
+const path = Astro.url.pathname;
+const isActive = (href: string) => path === href || path === href + "/";
+const dev = import.meta.env.DEV;
+---
+
+<header>
+  <nav>
+    <a href={`${BASE_PATH}/`} class={isActive(`${BASE_PATH}/`) ? "active" : ""}>Blog</a>
+    <a href={`${BASE_PATH}/notes`} class={isActive(`${BASE_PATH}/notes`) ? "active" : ""}>Notes</a>
+    {dev && <a href={`${BASE_PATH}/local`} class={isActive(`${BASE_PATH}/local`) ? "active" : ""}>Local</a>}
+  </nav>
+  <hr />
+</header>
+
+<style>
+  header {
+    position: sticky;
+    top: 0;
+    background: var(--main-bg-color);
+    margin-bottom: 1.5rem;
+    z-index: 10;
+  }
+  nav {
+    display: flex;
+    justify-content: flex-end;
+    gap: 1.5rem;
+    padding: 0.5rem 0;
+  }
+  nav a {
+    font-size: 0.95rem;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    text-decoration: none;
+    color: var(--main-color);
+    opacity: 0.45;
+    transition: opacity 0.15s ease, color 0.15s ease;
+  }
+  nav a:hover {
+    opacity: 1;
+    color: #c4874a;
+  }
+  nav a.active {
+    opacity: 1;
+    color: #c4874a;
+  }
+  hr {
+    border: none;
+    border-top: 1px solid currentColor;
+    opacity: 0.15;
+    margin: 0;
+  }
+</style>
