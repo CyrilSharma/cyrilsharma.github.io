@@ -62,7 +62,7 @@ export function extractPreview(id: string): string {
     const raw = readFileSync(resolve("html", id, "index.html"), "utf-8");
     const $ = cheerio.load(raw);
     wrapInlineEquations($);
-    $("script, nav, img").remove();
+    $("script, nav, img, h1, h2, h3").remove();
 
     const blocks: string[] = [];
     let textLen = 0;

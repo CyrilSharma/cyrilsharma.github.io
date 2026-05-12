@@ -27,7 +27,7 @@
   transition: border-color 150ms ease;
   position: relative;
   min-height: 9rem;
-  max-height: 22rem;
+  max-height: 15rem;
   overflow: hidden;
   contain: layout;
   margin-bottom: 4rem;
