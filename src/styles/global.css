@@ -253,7 +253,7 @@ blockquote p {
     text-align: center;
 }
 
-svg {
+.prose svg {
   margin-top: 8px;
 }
 
