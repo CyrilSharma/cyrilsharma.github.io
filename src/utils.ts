@@ -8,10 +8,22 @@ export const formatDate = (date: Date) =>
 const lenTags = ["p", "div", "ul", "ol", "dl", "blockquote", "pre", "table", "button"]; 
 const blockTags = [...lenTags, "style", "script"];
 
+export function wrapInlineEquations($: cheerio.CheerioAPI) {
+  $(".inline-equation").each((_, el) => {
+    const next = el.next;
+    if (next?.type === "text" && /^[.,;:!?]/.test(next.data ?? "")) {
+      const char = next.data[0];
+      next.data = next.data.slice(1);
+      $(el).replaceWith(`<span style="white-space: nowrap">${$.html(el)}${char}</span>`);
+    }
+  });
+}
+
 export function extractPreview(id: string): string {
   try {
     const raw = readFileSync(resolve("html", id, "index.html"), "utf-8");
     const $ = cheerio.load(raw);
+    wrapInlineEquations($);
     $("script, nav, img").remove();
 
     const blocks: string[] = [];

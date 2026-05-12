@@ -1,9 +1,10 @@
 ---
 import fs from "node:fs";
 import path from "node:path";
-import * as cheerio from "cheerio";
 import BlogPost from "$layouts/BlogPost.astro";
+import * as cheerio from "cheerio";
 import { getCollection } from "astro:content";
+import { wrapInlineEquations } from "../utils";
 
 export async function getStaticPaths() {
   const posts = await getCollection("blog");
@@ -19,14 +20,7 @@ export async function getStaticPaths() {
 const { file, slug } = Astro.props as { file: string; slug: string };
 const rawHtml = fs.readFileSync(file, "utf8");
 const $ = cheerio.load(rawHtml);
-$(".inline-equation").each((_, el) => {
-  const next = el.next;
-  if (next?.type === "text" && /^[.,;:!?]/.test(next.data ?? "")) {
-    const char = next.data[0];
-    next.data = next.data.slice(1);
-    $(el).replaceWith(`<span style="white-space: nowrap">${$.html(el)}${char}</span>`);
-  }
-});
+wrapInlineEquations($);
 const html = $.html();
 const posts = (await getCollection("blog"))
   .map((p) => {
