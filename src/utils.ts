@@ -18,8 +18,10 @@ export async function getPostStaticPaths(section: string) {
     }));
 }
 
-export const formatDate = (date: Date) =>
-  date.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+export const formatDate = (date: Date | string) => {
+  const d = date instanceof Date ? date : new Date(date);
+  return isNaN(d.valueOf()) ? "" : d.toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
+};
 
 const lenTags = ["p", "div", "ul", "ol", "dl", "blockquote", "pre", "table", "button"]; 
 const blockTags = [...lenTags, "style", "script"];

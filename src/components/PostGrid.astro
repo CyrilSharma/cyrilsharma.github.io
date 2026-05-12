@@ -1,5 +1,6 @@
 ---
 import "../styles/post-grid.css";
+import { formatDate } from "../utils";
 
 interface Post {
   id: string;
@@ -15,10 +16,6 @@ interface Props {
 
 const { posts, basePath } = Astro.props;
 
-const formatDate = (value: string | Date) => {
-  const d = value instanceof Date ? value : new Date(value as string);
-  return isNaN(d.valueOf()) ? "" : d.toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
-};
 ---
 
 <div class="post-grid">

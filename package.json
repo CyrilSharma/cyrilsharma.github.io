@@ -14,18 +14,14 @@
     "@astrojs/sitemap": "^3.4.0",
     "@fontsource/crimson-pro": "^5.2.8",
     "@iconify-json/mdi": "^1.2.3",
-    "@nanostores/react": "^1.0.0",
     "@types/react": "^19.1.8",
     "@types/react-dom": "^19.1.6",
     "astro": "^5.7.13",
     "astro-icon": "^1.1.5",
     "cheerio": "^1.2.0",
     "cmdk": "^1.1.1",
-    "install": "^0.13.0",
-    "nanostores": "^1.0.1",
     "react": "^19.1.0",
-    "react-dom": "^19.1.0",
-    "react-pro-sidebar": "^1.1.0"
+    "react-dom": "^19.1.0"
   },
   "devDependencies": {
     "concurrently": "^9.1.2"

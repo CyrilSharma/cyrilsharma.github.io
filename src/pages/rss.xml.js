@@ -3,6 +3,7 @@ import path from "node:path";
 import rss from "@astrojs/rss";
 import { getCollection } from "astro:content";
 import { SITE_TITLE, SITE_DESCRIPTION, BASE_PATH } from "$consts";
+import { SECTION_URL } from "../utils";
 
 const stripUnwanted = (html) =>
   html
@@ -36,7 +37,7 @@ export async function GET(context) {
         typeof post.data.desc === "string" ? post.data.desc : "",
       pubDate: post.data.updatedDate ?? post.data.date,
       categories: post.data.tags ?? [],
-      link: `${BASE_PATH}/${post.id}/`,
+      link: `${BASE_PATH}/${SECTION_URL[post.data.section] ?? post.data.section}/${post.id}/`,
       content: readPostHtml(post.id),
     })),
   });

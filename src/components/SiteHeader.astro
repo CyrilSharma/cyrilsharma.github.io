@@ -59,8 +59,8 @@ const posts: PalettePost[] = allPosts
     opacity: 0.45;
     transition: opacity 0.15s ease, color 0.15s ease;
   }
-  nav a:hover { opacity: 1; color: #c4874a; }
-  nav a.active { opacity: 1; color: #c4874a; }
+  nav a:hover { opacity: 1; color: var(--gold); }
+  nav a.active { opacity: 1; color: var(--gold); }
   hr {
     border: none;
     border-top: 1px solid currentColor;
@@ -84,7 +84,7 @@ const posts: PalettePost[] = allPosts
     transition: opacity 0.15s ease, color 0.15s ease;
     vertical-align: middle;
   }
-  .cp-trigger:hover { opacity: 1; color: #c4874a; }
+  .cp-trigger:hover { opacity: 1; color: var(--gold); }
   .cp-trigger svg { display: block; }
 
   .cp-backdrop {
@@ -161,10 +161,10 @@ const posts: PalettePost[] = allPosts
     gap: 1rem;
   }
   .cp-modal [cmdk-item][aria-selected="true"] {
-    background: rgba(196, 135, 74, 0.12);
+    background: rgba(var(--gold-rgb), 0.12);
   }
   .cp-modal [cmdk-item]:hover {
-    background: rgba(196, 135, 74, 0.08);
+    background: rgba(var(--gold-rgb), 0.08);
   }
 
   .cp-modal [cmdk-empty] {
@@ -187,7 +187,7 @@ const posts: PalettePost[] = allPosts
     font-weight: 600;
     letter-spacing: 0.06em;
     text-transform: uppercase;
-    color: #c4874a;
+    color: var(--gold);
     opacity: 0.7;
     flex-shrink: 0;
   }
