@@ -69,12 +69,19 @@ def main(argv) -> int:
   out_path = Path(args.out)
   out_path.parent.mkdir(parents=True, exist_ok=True)
 
+  def section_for(path: Path) -> str:
+    parts = path.parts
+    if "local" in parts:
+      return "local"
+    # Use the immediate parent directory name as the section.
+    return path.parent.name
+
   meta = {}
   for src in args.files:
     path = Path(src)
     slug = path.stem
     entry = query_frontmatter(path, root, args.features)
-    entry["local"] = "local/article" in path.as_posix()
+    entry["section"] = section_for(path)
     meta[slug] = entry
 
   # Add any manual/generated HTML folders not covered by Typst sources.

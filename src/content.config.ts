@@ -29,7 +29,7 @@ const blog = defineCollection({
       .optional()
       .transform((val) => (val ? parseDateInput(val) : undefined)),
     tags: z.array(z.string()).default([]),
-    local: z.boolean().default(false),
+    section: z.string().default("article"),
   }),
 });
 

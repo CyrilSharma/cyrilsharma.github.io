@@ -20,7 +20,7 @@ export function wrapInlineEquations($: cheerio.CheerioAPI) {
   });
 }
 
-export async function getPostList({ tag, excludeTag, local }: { tag?: string; excludeTag?: string; local?: boolean } = {}) {
+export async function getPostList({ section }: { section?: string } = {}) {
   return (await getCollection("blog"))
     .map((post) => {
       const displayDate = post.data.updatedDate ?? post.data.date;
@@ -34,13 +34,11 @@ export async function getPostList({ tag, excludeTag, local }: { tag?: string; ex
         date: displayDate,
         dateMs,
         tags: post.data.tags ?? [],
-        local: post.data.local ?? false,
+        section: post.data.section,
         preview: extractPreview(post.id),
       };
     })
-    .filter((p) => (local !== undefined ? p.local === local : true))
-    .filter((p) => (tag ? p.tags.includes(tag) : true))
-    .filter((p) => (excludeTag ? !p.tags.includes(excludeTag) : true))
+    .filter((p) => (section !== undefined ? p.section === section : true))
     .sort((a, b) => b.dateMs - a.dateMs);
 }
 

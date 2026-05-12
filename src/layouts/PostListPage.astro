@@ -10,12 +10,10 @@ import { resolve } from "node:path";
 interface Props {
   heading?: string;
   description?: string;
-  tag?: string;
-  excludeTag?: string;
-  local?: boolean;
+  section?: string;
 }
 
-const { heading = SITE_TITLE, description = SITE_DESCRIPTION, tag, excludeTag, local } = Astro.props;
+const { heading = SITE_TITLE, description = SITE_DESCRIPTION, section } = Astro.props;
 
 let sharedStyles = "";
 try {
@@ -24,7 +22,7 @@ try {
     .map((m) => m[0]).join("\n");
 } catch {}
 
-const posts = await getPostList({ tag, excludeTag, local });
+const posts = await getPostList({ section });
 ---
 
 <!doctype html>
