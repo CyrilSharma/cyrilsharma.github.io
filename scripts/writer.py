@@ -4,11 +4,14 @@ from rich.prompt import Prompt
 import datetime
 import os
 import sys
-import subprocess
 
 console = Console()
-BLOG_DIR = './content/article'
-LOCAL_DIR = './local/article'
+
+SECTION_DIRS = {
+    "blog":  "./content/article",
+    "notes": "./content/notes",
+    "local": "./local/article",
+}
 
 def iso_timestamp() -> str:
     """
@@ -38,12 +41,12 @@ def create_new_typst_file():
             continue
         break
 
-    # Ask whether local-only
-    local = Prompt.ask("[cyan]Local only?[/cyan]", choices=["y", "n"], default="n") == "y"
+    # Ask which section
+    section = Prompt.ask("[cyan]Section[/cyan]", choices=["blog", "notes", "local"], default="blog")
 
     # Ask for description, tags
-    description = "" # prompt_nonempty("[cyan]Enter short description[/cyan]")
-    raw_tags = prompt_nonempty("[cyan]Enter comma-separated tags (e.g. evolution,notes)[/cyan]")
+    description = ""
+    raw_tags = prompt_nonempty("[cyan]Enter comma-separated tags (e.g. evolution,cs)[/cyan]")
 
     # Build ISO timestamp string once
     timestamp = iso_timestamp()
@@ -69,14 +72,14 @@ def create_new_typst_file():
     )
 
     # Write to file
-    dest = LOCAL_DIR if local else BLOG_DIR
+    dest = SECTION_DIRS[section]
     os.makedirs(dest, exist_ok=True)
     filepath = f"{dest}/{filename}.typ"
     try:
         with open(filepath, "w", encoding="utf-8") as f:
             f.write(content)
-        console.print(f"\n✅ [green]Created new Typst file:[/green] [bold]{filename}[/bold]")
-        console.print(f"\n✅ [green]Blog URL:[/green] [bold]http://localhost:4321/Blog/{filename}/[/bold]")
+        console.print(f"\n✅ [green]Created:[/green] [bold]{filepath}[/bold]")
+        console.print(f"🔗 [green]URL:[/green] [bold]http://localhost:4321/{section}/{filename}/[/bold]")
     except OSError as e:
         console.print(f"[red]Error writing file:[/red] {e}")
         sys.exit(1)
