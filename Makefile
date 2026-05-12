@@ -1,5 +1,6 @@
 # Directories
-TYP_SRC_DIR := content/article
+TYP_SRC_DIR   := content/article
+NOTES_SRC_DIR := content/notes
 LOCAL_SRC_DIR := local/article
 TYP_OUT_DIR := html
 META_JSON := meta.json
@@ -9,16 +10,18 @@ TEMPLATE_DIR := typ/templates
 TEMPLATE_SRC := $(wildcard $(TEMPLATE_DIR)/*.typ)
 TEMPLATE_CFG := $(wildcard $(TEMPLATE_DIR)/*.toml)
 
-# Sources from both dirs
+# Sources from all dirs
 TYP_SRC   := $(wildcard $(TYP_SRC_DIR)/*.typ)
+NOTES_SRC := $(wildcard $(NOTES_SRC_DIR)/*.typ)
 LOCAL_SRC := $(wildcard $(LOCAL_SRC_DIR)/*.typ)
-ALL_SRC   := $(TYP_SRC) $(LOCAL_SRC)
+ALL_SRC   := $(TYP_SRC) $(NOTES_SRC) $(LOCAL_SRC)
 ALL_SRC_ESC := $(foreach f,$(ALL_SRC),'$(f)')
 
 # Outputs (one html/<slug>/index.html per source)
 TYP_HTML := \
-  $(patsubst $(TYP_SRC_DIR)/%.typ,  $(TYP_OUT_DIR)/%/index.html, $(TYP_SRC)) \
-  $(patsubst $(LOCAL_SRC_DIR)/%.typ, $(TYP_OUT_DIR)/%/index.html, $(LOCAL_SRC))
+  $(patsubst $(TYP_SRC_DIR)/%.typ,   $(TYP_OUT_DIR)/%/index.html, $(TYP_SRC)) \
+  $(patsubst $(NOTES_SRC_DIR)/%.typ, $(TYP_OUT_DIR)/%/index.html, $(NOTES_SRC)) \
+  $(patsubst $(LOCAL_SRC_DIR)/%.typ,  $(TYP_OUT_DIR)/%/index.html, $(LOCAL_SRC))
 
 .PHONY: all typst clean meta
 
