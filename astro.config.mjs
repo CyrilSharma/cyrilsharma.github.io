@@ -8,16 +8,18 @@ import fs from "node:fs";
 import { spawn } from "node:child_process";
 import * as cheerio from "cheerio";
 
+import { BASE_PATH } from "./src/site.mjs";
+
 const meta = JSON.parse(fs.readFileSync("./meta.json", "utf8"));
 const rawPages = Object.keys(meta).map(
-  (slug) => `https://cyrilsharma.github.io/Blog/${slug}/raw.txt`
+  (slug) => `https://cyrilsharma.github.io${BASE_PATH}/${slug}/raw.txt`
 );
 
 // https://astro.build/config
 export default defineConfig({
   // Deploys to GitHub Pages
   site: "https://cyrilsharma.github.io",
-  base: "/Blog",
+  base: BASE_PATH || "/",
 
   integrations: [
     sitemap({ customPages: rawPages }),
