@@ -51,6 +51,19 @@ const { title, desc, date, updatedDate, tags } = Astro.props;
     </main>
   <script>
     if (import.meta.hot) {
+      function wrapInlineEquations() {
+        document.querySelectorAll('.inline-equation').forEach(el => {
+          const next = el.nextSibling;
+          if (next?.nodeType === Node.TEXT_NODE && /^[.,;:!?]/.test(next.textContent ?? '')) {
+            const wrapper = document.createElement('span');
+            wrapper.style.whiteSpace = 'nowrap';
+            el.replaceWith(wrapper);
+            wrapper.appendChild(el);
+            wrapper.appendChild(document.createTextNode(next.textContent![0]));
+            next.textContent = next.textContent!.slice(1);
+          }
+        });
+      }
       const SKIP = new Set(["style", "script"]);
       import.meta.hot.on("typst-update", ({ content, scrollIndex }: { content: string, scrollIndex: number }) => {
         const prose = document.querySelector(".prose");
@@ -64,6 +77,7 @@ const { title, desc, date, updatedDate, tags } = Astro.props;
             target.scrollIntoView({ behavior: "smooth", block: "center" })
           );
         }
+        wrapInlineEquations();
       });
     }
   </script>

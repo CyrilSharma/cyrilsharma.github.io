@@ -679,6 +679,10 @@ Diffusion is essentially Denoised Score Matching. The main difference is _how it
 
 The only real problem with this idea is that ODE and SDE solvers will accumulate discretization error, which will compound the longer the trajectory. You can deal with this by taking a step with your ODE solver, and then taking a few steps of Langevin to correct the distribution, this is known as predictor-corrector sampling.
 
+// Add Flow Matching (main result is optimizing conditionals is the same as optimizing marginals?)
+// Add a math section, where we can derive the change of variables formula?
+// Maybe flow mapping stuff so you can explain skip connections.
+
 // TODO: Integration by parts / Divergence Theorem so I don't have to rederive stuff.
 // TODO: JS Divergence.
 // TODO: Annealed Importance Sampling

@@ -1,6 +1,7 @@
 ---
 import fs from "node:fs";
 import path from "node:path";
+import * as cheerio from "cheerio";
 import BlogPost from "$layouts/BlogPost.astro";
 import { getCollection } from "astro:content";
 
@@ -16,7 +17,17 @@ export async function getStaticPaths() {
 }
 
 const { file, slug } = Astro.props as { file: string; slug: string };
-const html = fs.readFileSync(file, "utf8");
+const rawHtml = fs.readFileSync(file, "utf8");
+const $ = cheerio.load(rawHtml);
+$(".inline-equation").each((_, el) => {
+  const next = el.next;
+  if (next?.type === "text" && /^[.,;:!?]/.test(next.data ?? "")) {
+    const char = next.data[0];
+    next.data = next.data.slice(1);
+    $(el).replaceWith(`<span style="white-space: nowrap">${$.html(el)}${char}</span>`);
+  }
+});
+const html = $.html();
 const posts = (await getCollection("blog"))
   .map((p) => {
     const sortDate = p.data.updatedDate ?? p.data.date;
