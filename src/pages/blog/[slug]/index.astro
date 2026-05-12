@@ -1,0 +1,28 @@
+---
+import fs from "node:fs";
+import * as cheerio from "cheerio";
+import BlogPost from "$layouts/BlogPost.astro";
+import { getCollection } from "astro:content";
+import { wrapInlineEquations, getPostStaticPaths } from "../../../utils";
+
+export async function getStaticPaths() {
+  return getPostStaticPaths("article");
+}
+
+const { file, slug } = Astro.props as { file: string; slug: string };
+const rawHtml = fs.readFileSync(file, "utf8");
+const $ = cheerio.load(rawHtml);
+wrapInlineEquations($);
+const html = $.html();
+const post = (await getCollection("blog")).find((p) => p.id === slug)!;
+---
+
+<BlogPost
+  title={post.data.title}
+  desc={post.data.desc}
+  date={post.data.date}
+  updatedDate={post.data.updatedDate}
+  tags={post.data.tags}
+>
+  <div set:html={html} />
+</BlogPost>

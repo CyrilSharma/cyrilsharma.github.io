@@ -1,15 +1,18 @@
 ---
 import { BASE_PATH } from "$consts";
 const path = Astro.url.pathname;
-const isActive = (href: string) => path === href || path === href + "/";
+const isActive = (segment: string) => {
+  const prefix = `${BASE_PATH}/${segment}`;
+  return path === prefix || path.startsWith(prefix + "/");
+};
 const dev = import.meta.env.DEV;
 ---
 
 <header>
   <nav>
-    <a href={`${BASE_PATH}/`} class={isActive(`${BASE_PATH}/`) ? "active" : ""}>Blog</a>
-    <a href={`${BASE_PATH}/notes`} class={isActive(`${BASE_PATH}/notes`) ? "active" : ""}>Notes</a>
-    {dev && <a href={`${BASE_PATH}/local`} class={isActive(`${BASE_PATH}/local`) ? "active" : ""}>Local</a>}
+    <a href={`${BASE_PATH}/blog`} class={isActive("blog") ? "active" : ""}>Blog</a>
+    <a href={`${BASE_PATH}/notes`} class={isActive("notes") ? "active" : ""}>Notes</a>
+    {dev && <a href={`${BASE_PATH}/local`} class={isActive("local") ? "active" : ""}>Local</a>}
   </nav>
   <hr />
 </header>

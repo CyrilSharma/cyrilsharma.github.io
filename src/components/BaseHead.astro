@@ -68,8 +68,8 @@ const { title, description, image = "/blog-placeholder-1.jpg" } = Astro.props;
 
 <script>
   if (import.meta.hot) {
-    import.meta.hot.on("typst-navigate", ({ slug }: { slug: string }) => {
-      const target = `${import.meta.env.BASE_URL}/${slug}/`;
+    import.meta.hot.on("typst-navigate", ({ prefix, slug }: { prefix: string; slug: string }) => {
+      const target = `${import.meta.env.BASE_URL}${prefix}/${slug}/`;
       if (!window.location.pathname.endsWith(`/${slug}/`)) {
         window.location.href = target;
       }

@@ -3,7 +3,7 @@ import BaseHead from "$components/BaseHead.astro";
 import SiteHeader from "$components/SiteHeader.astro";
 import PostGrid from "$components/PostGrid.astro";
 import { SITE_TITLE, SITE_DESCRIPTION, BASE_PATH } from "$consts";
-import { getPostList } from "../utils";
+import { getPostList, SECTION_URL } from "../utils";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
@@ -23,6 +23,7 @@ try {
 } catch {}
 
 const posts = await getPostList({ section });
+const postBasePath = `${BASE_PATH}/${SECTION_URL[section ?? ""] ?? section ?? ""}`;
 ---
 
 <!doctype html>
@@ -56,7 +57,7 @@ const posts = await getPostList({ section });
       <SiteHeader />
       <h1>{heading}</h1>
       {description && <p class="lead">{description}</p>}
-      <PostGrid posts={posts} basePath={BASE_PATH} />
+      <PostGrid posts={posts} basePath={postBasePath} />
     </main>
   </body>
 </html>

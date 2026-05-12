@@ -1,12 +1,9 @@
 import fs from "node:fs";
 import path from "node:path";
-import { getCollection } from "astro:content";
+import { getPostStaticPaths } from "../../../utils";
 
 export async function getStaticPaths() {
-  const posts = await getCollection("blog");
-  return posts.map((post) => ({
-    params: { slug: post.id },
-  }));
+  return getPostStaticPaths("article");
 }
 
 export async function GET({ params }: { params: { slug: string } }) {

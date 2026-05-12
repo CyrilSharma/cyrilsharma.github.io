@@ -11,9 +11,13 @@ import * as cheerio from "cheerio";
 import { BASE_PATH } from "./src/site.mjs";
 
 const meta = JSON.parse(fs.readFileSync("./meta.json", "utf8"));
-const rawPages = Object.keys(meta).map(
-  (slug) => `https://cyrilsharma.github.io${BASE_PATH}/${slug}/raw.txt`
-);
+const SECTION_URL = { article: "blog", notes: "notes", local: "local" };
+const rawPages = Object.entries(meta)
+  .filter(([, v]) => v.section !== "local")
+  .map(([slug, v]) => {
+    const prefix = SECTION_URL[v.section] ?? v.section;
+    return `https://cyrilsharma.github.io${BASE_PATH}/${prefix}/${slug}/raw.txt`;
+  });
 
 // https://astro.build/config
 export default defineConfig({
@@ -54,11 +58,18 @@ export default defineConfig({
             }
           }
 
+          const TYP_DIRS = {
+            "content/article": "blog",
+            "content/notes": "notes",
+            "local/article": "local",
+          };
+
           server.watcher.add(`./html/**/*.html`);
-          server.watcher.add(`./content/article`);
-          server.watcher.add(`./local/article`);
+          for (const dir of Object.keys(TYP_DIRS)) server.watcher.add(`./${dir}`);
+
           server.watcher.on("add", (file) => {
-            if (!file.endsWith(".typ") || (!file.includes("content/article") && !file.includes("local/article"))) return;
+            if (!file.endsWith(".typ")) return;
+            if (!Object.keys(TYP_DIRS).some(d => file.includes(d))) return;
             console.log(`[make] new file detected: ${file}, running make...`);
             const proc = spawn("make", [], { stdio: "inherit" });
             proc.on("exit", (code) => {
@@ -67,34 +78,35 @@ export default defineConfig({
             });
           });
           server.watcher.on("change", (file) => {
-            if (!file.endsWith(".typ") || (!file.includes("content/article") && !file.includes("local/article"))) return;
+            if (!file.endsWith(".typ")) return;
+            const dir = Object.keys(TYP_DIRS).find(d => file.includes(d));
+            if (!dir) return;
+            const prefix = TYP_DIRS[dir];
             const slug = path.basename(file, ".typ");
-            console.log(`[typst] navigating to ${slug}`);
-            server.ws.send({ type: "custom", event: "typst-navigate", data: { slug } });
+            server.ws.send({ type: "custom", event: "typst-navigate", data: { prefix, slug } });
           });
           const typstWatchers = new Map();
           server.middlewares.use((req, _res, next) => {
-            const match = req.url?.match(/^\/([^/?@]+)\//);
-            const slug = match?.[1];
-            if (slug && !typstWatchers.has(slug)) {
-              const typFile = fs.existsSync(`local/article/${slug}.typ`)
-                ? `local/article/${slug}.typ`
-                : `content/article/${slug}.typ`;
-              if (fs.existsSync(typFile)) {
-                fs.mkdirSync(`html/${slug}`, { recursive: true });
-                console.log(`[typst] starting watch for ${slug}`);
-                const proc = spawn(
-                  "typst",
-                  ["watch", typFile, `html/${slug}/index.html`,
-                   "--format", "html", "--features", "html", "--root", "."],
-                  { stdio: "inherit" }
-                );
-                proc.on("exit", (code) => {
-                  console.log(`[typst] watch for ${slug} exited with code ${code}`);
-                  typstWatchers.delete(slug);
-                });
-                typstWatchers.set(slug, proc);
-              }
+            const match = req.url?.match(/^\/(blog|notes|local)\/([^/?@]+)\//);
+            if (!match) return next();
+            const [, urlPrefix, slug] = match;
+            if (typstWatchers.has(slug)) return next();
+            const typDirMap = { blog: "content/article", notes: "content/notes", local: "local/article" };
+            const typFile = `${typDirMap[urlPrefix]}/${slug}.typ`;
+            if (fs.existsSync(typFile)) {
+              fs.mkdirSync(`html/${slug}`, { recursive: true });
+              console.log(`[typst] starting watch for ${urlPrefix}/${slug}`);
+              const proc = spawn(
+                "typst",
+                ["watch", typFile, `html/${slug}/index.html`,
+                 "--format", "html", "--features", "html", "--root", "."],
+                { stdio: "inherit" }
+              );
+              proc.on("exit", (code) => {
+                console.log(`[typst] watch for ${slug} exited with code ${code}`);
+                typstWatchers.delete(slug);
+              });
+              typstWatchers.set(slug, proc);
             }
             next();
           });

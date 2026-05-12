@@ -1,7 +1,22 @@
 import { readFileSync } from "fs";
-import { resolve } from "path";
+import { join, resolve } from "path";
 import * as cheerio from "cheerio";
 import { getCollection } from "astro:content";
+
+export const SECTION_URL: Record<string, string> = {
+  article: "blog",
+  notes: "notes",
+  local: "local",
+};
+
+export async function getPostStaticPaths(section: string) {
+  return (await getCollection("blog"))
+    .filter((p) => p.data.section === section)
+    .map((p) => ({
+      params: { slug: p.id },
+      props: { file: join("html", p.id, "index.html"), slug: p.id },
+    }));
+}
 
 export const formatDate = (date: Date) =>
   date.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
