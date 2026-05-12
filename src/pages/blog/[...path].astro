@@ -1,0 +1,18 @@
+---
+import { getCollection } from "astro:content";
+
+export async function getStaticPaths() {
+  const posts = await getCollection("blog");
+  const articleSlugs = posts
+    .filter((p) => p.data.section === "article")
+    .map((p) => p.id);
+
+  return [
+    { params: { path: undefined } },           // /Blog/ → /blog/
+    ...articleSlugs.map((slug) => ({ params: { path: slug } })), // /Blog/slug/ → /blog/slug/
+  ];
+}
+
+const { path } = Astro.params;
+return Astro.redirect(`/blog${path ? `/${path}` : ""}`, 301);
+---
