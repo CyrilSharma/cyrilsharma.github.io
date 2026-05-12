@@ -28,7 +28,7 @@ const posts: PalettePost[] = allPosts
     <a href={`${BASE_PATH}/blog`} class={isActive("blog") ? "active" : ""}>Blog</a>
     <a href={`${BASE_PATH}/notes`} class={isActive("notes") ? "active" : ""}>Notes</a>
     {dev && <a href={`${BASE_PATH}/local`} class={isActive("local") ? "active" : ""}>Local</a>}
-    <CommandPalette posts={posts} client:load />
+    <CommandPalette posts={posts} dev={dev} client:load />
   </nav>
   <hr />
 </header>
@@ -174,12 +174,26 @@ const posts: PalettePost[] = allPosts
     font-size: 0.9rem;
   }
 
+  .cp-modal [cmdk-group-heading] {
+    padding: 0.4rem 1rem 0.15rem;
+    font-size: 0.7rem;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    opacity: 0.35;
+    color: var(--main-color);
+  }
+
   .cp-title {
     font-size: 0.95rem;
     color: var(--main-color);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+  .cp-title--page {
+    font-weight: 700;
+    color: var(--gold);
   }
 
   .cp-badge {

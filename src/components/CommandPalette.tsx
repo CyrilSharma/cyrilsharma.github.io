@@ -15,7 +15,16 @@ const SECTION_LABEL: Record<string, string> = {
   local: "Local",
 };
 
-export default function CommandPalette({ posts }: { posts: PalettePost[] }) {
+const MAIN_PAGES = [
+  { label: "Blog",  url: "/blog"  },
+  { label: "Notes", url: "/notes" },
+];
+
+const DEV_PAGES = [
+  { label: "Local", url: "/local" },
+];
+
+export default function CommandPalette({ posts, dev }: { posts: PalettePost[]; dev: boolean }) {
   const [open, setOpen] = useState(false);
 
   const show = useCallback(() => setOpen(true), []);
@@ -52,23 +61,39 @@ export default function CommandPalette({ posts }: { posts: PalettePost[] }) {
                 <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
               </svg>
             </button>
-            <Command>
+            <Command onKeyDown={(e) => {
+              if (e.key === "Tab") {
+                e.preventDefault();
+                const ev = new KeyboardEvent("keydown", { key: e.shiftKey ? "ArrowUp" : "ArrowDown", bubbles: true });
+                e.currentTarget.dispatchEvent(ev);
+              }
+            }}>
               <Command.Input placeholder="Where to?" autoFocus />
               <Command.List>
                 <Command.Empty>No pages found.</Command.Empty>
-                {posts.map((post) => (
-                  <Command.Item
-                    key={post.id}
-                    value={`${post.title} ${post.url}`}
-                    onSelect={() => {
-                      hide();
-                      window.location.href = post.url;
-                    }}
-                  >
-                    <span className="cp-title">{post.title}</span>
-                    <span className="cp-badge">{SECTION_LABEL[post.section] ?? post.section}</span>
-                  </Command.Item>
-                ))}
+                <Command.Group heading="Pages">
+                  {[...MAIN_PAGES, ...(dev ? DEV_PAGES : [])].map((page) => (
+                    <Command.Item
+                      key={page.url}
+                      value={page.label}
+                      onSelect={() => { hide(); window.location.href = page.url; }}
+                    >
+                      <span className="cp-title cp-title--page">{page.label}</span>
+                    </Command.Item>
+                  ))}
+                </Command.Group>
+                <Command.Group heading="Posts">
+                  {posts.map((post) => (
+                    <Command.Item
+                      key={post.id}
+                      value={`${post.title} ${post.url}`}
+                      onSelect={() => { hide(); window.location.href = post.url; }}
+                    >
+                      <span className="cp-title">{post.title}</span>
+                      <span className="cp-badge">{SECTION_LABEL[post.section] ?? post.section}</span>
+                    </Command.Item>
+                  ))}
+                </Command.Group>
               </Command.List>
             </Command>
           </div>
