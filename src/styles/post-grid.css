@@ -30,7 +30,7 @@
   max-height: 15rem;
   overflow: hidden;
   contain: layout;
-  margin-bottom: 4rem;
+  margin-bottom: 2rem;
 }
 
 
@@ -46,7 +46,7 @@
 
 .pg-title {
   margin: 0;
-  font-size: 3rem;
+  font-size: 2.5rem;
   line-height: 1.2;
 }
 
