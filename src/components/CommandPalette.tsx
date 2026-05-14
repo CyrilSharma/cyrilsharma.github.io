@@ -31,6 +31,13 @@ export default function CommandPalette({ posts, dev }: { posts: PalettePost[]; d
   const hide = useCallback(() => setOpen(false), []);
 
   useEffect(() => {
+    if (open) {
+      document.body.style.overflow = "hidden";
+      return () => { document.body.style.overflow = ""; };
+    }
+  }, [open]);
+
+  useEffect(() => {
     const down = (e: KeyboardEvent) => {
       if (e.key === "Escape") { hide(); return; }
       const tag = (e.target as HTMLElement).tagName;

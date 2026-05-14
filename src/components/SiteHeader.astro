@@ -137,7 +137,8 @@ const posts: PalettePost[] = allPosts
   .cp-modal [cmdk-root] {
     display: flex;
     flex-direction: column;
-    height: 100%;
+    flex: 1;
+    min-height: 0;
   }
 
   .cp-modal [cmdk-input] {
@@ -155,6 +156,8 @@ const posts: PalettePost[] = allPosts
   .cp-modal [cmdk-list] {
     overflow-y: auto;
     padding: 0.4rem 0;
+    flex: 1;
+    min-height: 0;
   }
 
   .cp-modal [cmdk-item] {
