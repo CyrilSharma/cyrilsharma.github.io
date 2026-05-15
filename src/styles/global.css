@@ -449,11 +449,12 @@ sup a:hover {
     grid-template-columns: 0px 1fr;
   }
 
-  nav[role="doc-toc"] h2 {
+  .prose nav[role="doc-toc"] h2 {
     font-size: 2.0rem;
     font-weight: 700;
     letter-spacing: 0.08em;
     opacity: 0.5;
+    margin-left: 1.5rem;
   }
 
 
@@ -467,7 +468,6 @@ sup a:hover {
     width: calc(50vw - 430px - 1.5rem);
     margin-left: calc(430px - 50vw);
     margin-bottom: 0;
-    padding-left: 1rem;
     max-height: calc(100vh - 4rem);
     overflow-y: auto;
   }
