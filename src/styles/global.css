@@ -166,6 +166,12 @@ ol {
   line-height: 2rem;
 }
 
+@media (max-width: 640px) {
+  .prose p {
+    text-align: left;
+  }
+}
+
 
 .prose div > p:last-child {
   margin-bottom: 0;
