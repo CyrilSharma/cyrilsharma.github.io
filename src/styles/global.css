@@ -164,6 +164,7 @@ ol {
   text-wrap: pretty;
   letter-spacing: 0.01em;
   line-height: 2rem;
+  hyphens: auto
 }
 
 @media (max-width: 640px) {
@@ -483,4 +484,11 @@ sup a:hover {
     grid-column: 2;
     min-width: 0;
   }
+}
+
+.prose sup {
+  vertical-align: baseline;
+  font-size: 0.75em;
+  position: relative;
+  top: -0.4em;
 }
