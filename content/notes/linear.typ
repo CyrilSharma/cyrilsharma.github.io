@@ -116,20 +116,6 @@ $]
   Imagine we have $u, v in "Col(A)"$ and $A^top u = A^top v$. Then, $A^top (u - v) = 0, u - v in "Col"(A)$. But this implies $u - v = 0$ by the above theormem. Hence, every non-zero vector out of $A$ gets mapped to a unique vector out of $A^top A$.
 ]
 
-== Triangular Matrices
-#theorem[
-  The determinant of a triangular matrix is the product of its diagonal entries.
-]
-#proof[
-  The determinant is invariant to column addition (think about a parallelogram), hence you can just zero out all the entries not in the diagonals, and the claim becomes plainly true.
-]
-#theorem[
-  The Triangular matrix equation $T x = b$ can be solved in $n^2$ time.
-]
-#proof[
-  Use back-substitution.
-]
-
 == Similar Matrices
 #definition[
   $A$ and $B$ are similar if $A = P^(-1)B P$ for some matrix $P$
@@ -326,6 +312,7 @@ $
 $
 
 == Trace
+The trace is just the sum of diagonal entries for a square matrix.
 #theorem[The trace is invariant to cyclic permutations.]
 #proof[$
 sum_(i, j, k)A_(i j)B_(j k)C_(k i) = T(A B C) = \
@@ -339,6 +326,78 @@ T(P^(-1) D P) = T(D) = sum_i lambda_i
 $
 
 So the trace of a matrix is the sum of its eigenvalues, or more generally the trace of $A^top A$ is the sum of singular values squared.
+
+== Determinant
+The Determinant can be thought of as a generalization of volume. Specifically, the determinant of a matrix $A$ is the volume spanned by the columns of $A$. The following set of properties uniquely determines the determinant.
++ Scaling a column by $a$ scales $"Det"(A)$ by $a$.
++ Adding or subtracting one column from another does not affect $"Det"(A)$.
++ $"Det"(I) = 1$
+
+1 and 3 are very natural (think the volume of rectangular prism). 2 makes sense because the volume of parellelograms and their generalizations depends purely on the base and the height. Perturbing a vector in directions parallel to the base won't affect the height, keeping the volume the same.
+
+#theorem[
+  $"Det"(A B) = "Det"(A) "Det"(B)$
+]
+#proof[
+  Applying some column operations (not the scaling ones) won't change the determinant and will leave us with...
+  $
+     "Det"([sum_i a_i b_(i 1), sum_i a_i b_(i 2), ...]) = "Det"([a_1 c_1, a_2 c_2, ...]) = product c_i "Det"(A)
+  $
+  Now there isn't necessarily a set of columnwise ops that does this, but if $B$ is invertible there is always a matrix $Z$ such that $Z$ can be written as
+  $
+    Z_i = (-1)^(alpha_i) P_i
+  $
+
+  Where $P$ is some permutation matrix and $alpha_i$ is some integer. I'm basically saying you can implement a permutation upto sign using column addition, which can be done via composing addition-only "swap" operations implemented as follows.
+  $
+    (a, b) => (a, a+b) => (-b, a+b) => (-b, a)
+  $ 
+  
+  Furthermore, $Z$ can be chosen such that $B Z$ can be transformed entirely through column ops (again, not scaling) into a diagonal matrix and...
+  $
+    "det"(A B) = "det"(A B Z) quad Z_i = (-1)^(alpha_i) P_i
+  $
+
+  This is essentially a result of Gaussian Elimination (without scaling the rows to have unit diagonal entries), see the LU decomposition. If $B$ isn't invertible, it's easy to see both sides are 0.
+
+  What is $product c_i$? Let $X$ denote the columnwise ops we need to apply to obtain the clean from shown above.
+  $
+    B X = "diag"(c_i)
+  $
+
+  Since $X$ is purely columnwise ops, the determinant of the LHS and RHS are equal, and thus, $product c_i = "Det"(B)$. This shows the claim.
+]
+
+#lemma[
+  The determinant of a triangular matrix is the product of its diagonal entries.
+]
+#proof[
+  Take the identity matrix. First scale all columns to match the diagonal entries of the triangular matrix. The rest of the entries can clearly be obtained via column addition.
+]
+
+#theorem[
+  $"Det"(A) = "Det"(A^top)$
+]
+#proof[
+  An elementary column operation has determinant $1$. It's transpose (an elementary row operation) also has determinant $1$. Thus, we can apply column operations to the left and row operations to the right in a corresponding fashion, until we reach a triangular matrix on both sides. The entries of the mainline diagonal will be equal by symmetry and so determinants are equal by the determinant of a triangular matrix.
+]
+
+The determinants properties allow a clean characterization of the inverse matrix. Suppose there is a solution to $A x = b$. Then, $b = sum_i x_i a_i$. Hence, 
+$
+  "Det"([a_0, ... a_(i - 1), b, ... ]) = "Det"([a_0, ... a_(i - 1), x_i a_i, ... ])  = x_i "Det"(A)
+$
+
+Choosing $x$ to be matrix valued and $b$ to be $I$ gives a formula for each entry of the inverse matrix (see Cramer's Rule). The general form will look like...
+$
+  A^(-1) = 1/("Det"(A)) C
+$
+
+Where the entries of $C$ are computed as above. $C$ is called the co-factor matrix. The co-factor matrix also given an alternate formula for the determinant.
+$
+  "Det"(A) = C_(i, :) A_(:, i)
+$
+
+A pretty useful property (seen readily from Cramer's rule) is that the entries of $C_i$ and $C^top_i$ _do not depend on_ $A_i$ or $A_i^top$, making the derivative of the determinant straight-forward.
 
 == Norms
 #definition[
@@ -436,44 +495,20 @@ The best way to think about these matrices is in terms of the $x^top A x$ object
 ]
 The first line takes advantage of the fact that we can construct an orthonormal eigenbasis.
 
-== Companion Matrix
-A companion matrix is just a construction whose eigenvalue equation is exactly some polynomial. For the polynomial $c_1 + c_2 x + ... + c_n x^n + x^(n + 1)$. It can be constructed as follows.
-$
-  mat(
-    0, 0, 0, ..., 0, c_1;
-    1, 0, 0, ..., 0, c_2;
-    0, 1, 0, ..., 0, c_3;
-    0, 0, 1, ..., 0, c_4;
-    dots.v, dots.v, dots.v, dots.down, dots.v, dots.v;
-    0, 0, 0, ..., 1, c_n;
-  )
-$
+// == Companion Matrix
+// A companion matrix is just a construction whose eigenvalue equation is exactly some polynomial. For the polynomial $c_1 + c_2 x + ... + c_n x^n + x^(n + 1)$. It can be constructed as follows.
+// $
+//   mat(
+//     0, 0, 0, ..., 0, c_1;
+//     1, 0, 0, ..., 0, c_2;
+//     0, 1, 0, ..., 0, c_3;
+//     0, 0, 1, ..., 0, c_4;
+//     dots.v, dots.v, dots.v, dots.down, dots.v, dots.v;
+//     0, 0, 0, ..., 1, c_n;
+//   )
+// $
 
-This is useful to know because it means every root finding problem can be formulated as an eigenvalue problem. Since there is no formula for polynomials of degree five and greater, it implies there is no finite sequence of operations which can diagonalize an arbitrary matrix.
-
-== Stability
-/ Forward-Stable: An algorithm that gives almost the right answer (within epsilon relative error) to almost the right problem (inputs within epsilon relative error).
-/ Backward-Stable: An algorithm which can be interpreted to give the exact right answer to a perturbed problem (within epsilon relative error of the original problem).
-
-Inner products are forward and backward stable. Outer products are not backwards stable, because you cannot usually interpret the output matrix as the outer product of two perturbed input vectors (the perturbation to the output matrix doesn't factor).
-
-If you have backwards stability, you can bound the error of the computation as follows.
-+ Compute the maximum a local perturbation can affect the output (e.g. a $epsilon$ difference causes at most a $k epsilon$ change in the output). The size of this difference is known as the _condition_ of the problem.
-+ Use step 1 to bound the error of the algorithm by bounding how different the output to the approximate problem is versus the original problem.
-
-This is known as backwards error analysis and is much simpler than the naive approach, where you try to compute the aggregate errors of individual floating point operations in an algorithm.
-
-#definition[
-  The condition number of a matrix is how sensitive it is to small perturbations. Suppose I have the equation $A x = b$, and there is some error $epsilon$, in $b$. The condition number tells me the maximum ratio of relative error in $b$ to relative error in $x$.
-  $
-   max_(epsilon, b != 0) frac((||A^(-1) epsilon||) / (||A^(-1) b||), (||epsilon||) / (||b||), style: "horizontal") = 
-   max_(epsilon != 0) ((||A^(-1) epsilon||) / (||epsilon||)) max_(b != 0) ((||b||) / (||A^(-1) b||)) <= \
-   max_(epsilon != 0) ((||A^(-1) epsilon||) / (||epsilon||)) max_(gamma != 0) ((||A gamma||) / (||gamma||)) =\
-   ||A^(-1)||||A||
-  $
-
-  Where the last step came from choosing $b = A gamma$. You can also verify you get this same bound if there's relative error in $A$ or in $x$.
-]
+// This is useful to know because it means every root finding problem can be formulated as an eigenvalue problem. Since there is no formula for polynomials of degree five and greater, it implies there is no finite sequence of operations which can diagonalize an arbitrary matrix.
 
 == Kronecker Product
 #definition[
@@ -499,6 +534,8 @@ This is a useful tool when you are solving for matrices, for example
 $
   A X B + X = C arrow (B^top times.o A + I)"vec"(X) = "vec"(C)
 $
+
+
 
 = Decompositions
 
@@ -667,6 +704,32 @@ Where the last step follows from $R$ being triangular.
 The simpler decomposition and lack of pivoting makes this decomposition very useful when its applicable.
 
 = Linear Routines
+== Stability
+We'll now start looking at Algorithms for computing quantities in Linear Algebra. An important characterization of these algorithms is _stability_, which tells you in what sense your solution is "close" to the desired solution.
+
+/ Forward-Stable: An algorithm that gives almost the right answer (within epsilon relative error) to almost the right problem (inputs within epsilon relative error).
+/ Backward-Stable: An algorithm which can be interpreted to give the exact right answer to a perturbed problem (within epsilon relative error of the original problem).
+
+Inner products are forward and backward stable. Outer products are not backwards stable, because you cannot usually interpret the output matrix as the outer product of two perturbed input vectors (the perturbation to the output matrix doesn't factor).
+
+If you have backwards stability, you can bound the error of the computation as follows.
++ Compute the maximum a local perturbation can affect the output (e.g. a $epsilon$ difference causes at most a $k epsilon$ change in the output). The size of this difference is known as the _condition_ of the problem.
++ Use step 1 to bound the error of the algorithm by bounding how different the output to the approximate problem is versus the original problem.
+
+This is known as backwards error analysis and is much simpler than the naive approach, where you try to compute the aggregate errors of individual floating point operations in an algorithm.
+
+#definition[
+  The condition number of a matrix is how sensitive it is to small perturbations. Suppose I have the equation $A x = b$, and there is some error $epsilon$, in $b$. The condition number tells me the maximum ratio of relative error in $b$ to relative error in $x$.
+  $
+   max_(epsilon, b != 0) frac((||A^(-1) epsilon||) / (||A^(-1) b||), (||epsilon||) / (||b||), style: "horizontal") = 
+   max_(epsilon != 0) ((||A^(-1) epsilon||) / (||epsilon||)) max_(b != 0) ((||b||) / (||A^(-1) b||)) <= \
+   max_(epsilon != 0) ((||A^(-1) epsilon||) / (||epsilon||)) max_(gamma != 0) ((||A gamma||) / (||gamma||)) =\
+   ||A^(-1)||||A||
+  $
+
+  Where the last step came from choosing $b = A gamma$. You can also verify you get this same bound if there's relative error in $A$ or in $x$.
+]
+
 == Richardson Iteration
 #theorem[
   Suppose we want to solve $A x = b$. Computing inverses is expensive, and not easily done in parallel. Under certain conditions, we can instead run the following equation until we reach a fixed point.
