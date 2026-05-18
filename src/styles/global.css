@@ -117,6 +117,8 @@ a:hover {
   list-style-position: outside;
   display: inline-block;
   list-style: none;
+  text-align: justify;
+  hyphens: auto;
 }
 
 ol {
