@@ -466,6 +466,9 @@ sup a:hover {
     margin-left: 1.5rem;
   }
 
+  .prose nav[role="doc-toc"] ol {
+    text-align: left;
+  }
 
   .prose > div:has(> nav[role="doc-toc"]) > nav[role="doc-toc"],
   .prose:has(> nav[role="doc-toc"]) > nav[role="doc-toc"] {
