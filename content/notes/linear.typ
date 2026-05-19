@@ -330,59 +330,76 @@ So the trace of a matrix is the sum of its eigenvalues, or more generally the tr
 == Determinant
 The Determinant can be thought of as a generalization of volume. Specifically, the determinant of a matrix $A$ is the volume spanned by the columns of $A$. The following set of properties uniquely determines the determinant.
 + Scaling a column by $a$ scales $"Det"(A)$ by $a$.
-+ Adding or subtracting one column from another does not affect $"Det"(A)$.
++ Adding or subtracting a multiple of one column from another does not affect $"Det"(A)$.
 + $"Det"(I) = 1$
 
 1 and 3 are very natural (think the volume of rectangular prism). 2 makes sense because the volume of parellelograms and their generalizations depends purely on the base and the height. Perturbing a vector in directions parallel to the base won't affect the height, keeping the volume the same.
 
 #theorem[
-  $"Det"(A B) = "Det"(A) "Det"(B)$
+  If $A$ is not invertible, $"Det"(A) = 0$.
 ]
 #proof[
-  Applying some column operations (not the scaling ones) won't change the determinant and will leave us with...
-  $
-     "Det"([sum_i a_i b_(i 1), sum_i a_i b_(i 2), ...]) = "Det"([a_1 c_1, a_2 c_2, ...]) = product c_i "Det"(A)
-  $
-  Now there isn't necessarily a set of columnwise ops that does this, but if $B$ is invertible there is always a matrix $Z$ such that $Z$ can be written as
-  $
-    Z_i = (-1)^(alpha_i) P_i
+  There is no way to reduce $A$ to $I$ via elementary column operations otherwise it would be invertible since those operations are invertible. Hence, every application of axioms which yields a value for $"Det"(A)$ must go through Axiom 1 choosing $a = 0$. Indeed, there always exists such a path as the columns of $A$ are linearly dependent and a linear combination of them can be used to zero out any particular column.
+]
+
+#theorem[$
+  "Det"(a_1, ..., u + v, ..., a_n) = "Det"(a_1, ..., u, ..., a_n) + "Det"(a_1, ..., v, ..., a_n)
+$]
+#proof[
+  Let $u = u_1 s + u_2 q$ and $v = v_1 s' + v_2 q'$, where $s$ and $s'$ are in $S = "Span"(a_1, ..., a_n)$ and $q$ and $q'$ are in $S^top$. Then... $ 
+    "Det"(a_1, ..., u + v, ..., a_n) = "Det"(a_1, ..., u_2 q + v_2 q', ..., a_n)
   $
 
-  Where $P$ is some permutation matrix and $alpha_i$ is some integer. I'm basically saying you can implement a permutation upto sign using column addition, which can be done via composing addition-only "swap" operations implemented as follows.
-  $
-    (a, b) => (a, a+b) => (-b, a+b) => (-b, a)
+  Now if $a_1, ..., a_n$ are linearly dependent, both sides are zero and the theorem holds plainly. If they are independent, $S$ is rank $N - 1$, $S^top$ is rank $1$, so $q$ and $q'$ point in the same direction. Hence we can write $q' = c q$ and...
   $ 
-  
-  Furthermore, $Z$ can be chosen such that $B Z$ can be transformed entirely through column ops (again, not scaling) into a diagonal matrix and...
+    "Det"(a_1, ..., u + v, ..., a_n) = "Det"(a_1, ..., (u_2 + c v_2)q, ..., a_n) = \
+    "Det"(a_1, ..., u_2 q, ..., a_n) + "Det"(a_1, ..., c v_2 q, ..., a_n) =  \
+     "Det"(a_1, ..., u_1 s + u_2 q, ..., a_n) + "Det"(a_1, ..., v_1 s' + c v_2 q, ..., a_n) =  \
+    "Det"(a_1, ..., u, ..., a_n) + "Det"(a_1, ..., v, ..., a_n)
   $
-    "det"(A B) = "det"(A B Z) quad Z_i = (-1)^(alpha_i) P_i
-  $
-
-  This is essentially a result of Gaussian Elimination (without scaling the rows to have unit diagonal entries), see the LU decomposition. If $B$ isn't invertible, it's easy to see both sides are 0.
-
-  What is $product c_i$? Let $X$ denote the columnwise ops we need to apply to obtain the clean from shown above.
-  $
-    B X = "diag"(c_i)
-  $
-
-  Since $X$ is purely columnwise ops, the determinant of the LHS and RHS are equal, and thus, $product c_i = "Det"(B)$. This shows the claim.
-]
-
-#lemma[
-  The determinant of a triangular matrix is the product of its diagonal entries.
-]
-#proof[
-  Take the identity matrix. First scale all columns to match the diagonal entries of the triangular matrix. The rest of the entries can clearly be obtained via column addition.
 ]
 
 #theorem[
-  $"Det"(A) = "Det"(A^top)$
+  $
+    "Det"(a_1, ..., a_n) = sum_(sigma in S_n) "sgn"(sigma) product_i a_(i, sigma(i))
+  $
 ]
 #proof[
-  An elementary column operation has determinant $1$. It's transpose (an elementary row operation) also has determinant $1$. Thus, we can apply column operations to the left and row operations to the right in a corresponding fashion, until we reach a triangular matrix on both sides. The entries of the mainline diagonal will be equal by symmetry and so determinants are equal by the determinant of a triangular matrix.
+  $
+    "Det"(a_1, ..., a_n) = "Det"(sum a_(1 i) e_i, ..., sum a_(n i) e_i) = sum_(i_1, ..., i_n) a_(1, i_1)... a_(n, i_n) "Det"(e_i_1, ..., e_i_n)
+  $
+
+  The second equality comes via the multi-linearity property established above. Since repeat elements in the determinant zero it, it follows that we only need to evaluate the sum for every permutation.
 ]
 
-The determinants properties allow a clean characterization of the inverse matrix. Suppose there is a solution to $A x = b$. Then, $b = sum_i x_i a_i$. Hence, 
+From here, it's not too hard to derive the recursive formula taught in school. The main punchline of the above theorem is there is a formula for the determinant, and hence its unique.
+
+#theorem[
+  $ "Det"(A B) = "Det"(A) "Det"(B) $
+]
+#proof[
+  If $A$ or $B$ is not invertible, then $A B$ is not invertible, and both sides are $0$. Otherwise, both $A$ and $B$ can be written in terms of Elementary Gaussian column operations.
+  $
+    A = product_i A_i quad B = product_i B_i
+  $
+
+  Each operation scales the determinant, denote $a_i$ and $b_i$ to indicate the amount of scaling. Hence,
+  $
+    "Det"(A B) = "Det"(product_i A_i product_i B_i) = product_i a_i product_i b_i = "Det"(A) "Det"(B)
+  $
+]
+
+#theorem[
+  $ "Det"(A) = "Det"(A^top) $
+]
+#proof[
+  It's easily verified that for every elementary column operation $E$, $"Det"(E) = "Det"(E^top)$. If $A$ is not invertible, $A^top$ is also not invertible (so both sides are 0) otherwise, $A$ can be written in terms of elementary Gaussian column operations.
+  $
+    "Det"(A) = "Det"(product E_i) = product "Det"(E_i) = product "Det"(E_i^top) = "Det"(A^top)
+  $
+]
+
+Determinants yield a clean characterization of the inverse matrix. Suppose there is a solution to $A x = b$. Then, $b = sum_i x_i a_i$. Hence, 
 $
   "Det"([a_0, ... a_(i - 1), b, ... ]) = "Det"([a_0, ... a_(i - 1), x_i a_i, ... ])  = x_i "Det"(A)
 $
@@ -398,6 +415,7 @@ $
 $
 
 A pretty useful property (seen readily from Cramer's rule) is that the entries of $C_i$ and $C^top_i$ _do not depend on_ $A_i$ or $A_i^top$, making the derivative of the determinant straight-forward.
+
 
 == Norms
 #definition[
