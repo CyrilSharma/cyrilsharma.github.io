@@ -553,6 +553,23 @@ $
   A X B + X = C arrow (B^top times.o A + I)"vec"(X) = "vec"(C)
 $
 
+== Matrix Derivatives
+The notation used for matrix derivatives is often messy. I prefer the notation from #link("https://www.janmagnus.nl/papers/gentle.pdf")[this writeup]. We are going to define the derivative of $f$, $D(f)$ such that
+$
+  d(f) = D(f)dx approx f(x + dx) - f(x)
+$
+
+The left-hand side is the differential, it tells you how much the output changes given a tiny perturbation in inputs. This definition of the derivative is consistent with $1$D calculus, but some notations violate this by making the derivative equivalent to the gradient, which induces an extra transpose and makes all the results much less clean.
+$
+  (nabla_x f)^top dx = (D(f))^top dx approx f(x + dx) - f(x)
+$
+
+Formally, the $D(f)_(i j)$ will be the rate the $i$th output changes with respect to the $j$th input. You can of course use this definition to derive all the derivatives, but it's usually far easier to work with differentials (e.g. tiny differences in outputs and inputs) and derive the derivative from there if needed. This is because differentials are the same size as the inputs and outputs, while derivatives scale with respect to the product of input and output sizes.
+
+Using differentials, product rule, and chain rule, you can easily derive most results.
++ $D_x (A x) = A <=> D(A x)_(i j) = d/dx_j sum_(i j') a_(i j') x_(i j') = a_(i j)$
++ $d(x^top A x) = dx^top A x + x^top dA x + x^top A dx = x^top (A^top + A)dx => D(...) = x^top (A^top + A)$
++ $X^(-1)X = I => (d X^(-1))X + X^(-1)(d X) = 0 => d(X^(-1)) = -X^(-1)(d X) X^(-1) => D(...) = -((X^(-1))^top times.o X^(-1))$
 
 
 = Decompositions
