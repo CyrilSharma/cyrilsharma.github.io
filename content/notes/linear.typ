@@ -571,6 +571,17 @@ Using differentials, product rule, and chain rule, you can easily derive most re
 + $d(x^top A x) = dx^top A x + x^top dA x + x^top A dx = x^top (A^top + A)dx => D(...) = x^top (A^top + A)$
 + $X^(-1)X = I => (d X^(-1))X + X^(-1)(d X) = 0 => d(X^(-1)) = -X^(-1)(d X) X^(-1) => D(...) = -((X^(-1))^top times.o X^(-1))$
 
+#theorem[
+  $
+    log("Det"(A)) = Tr(log(A))
+  $
+]
+#proof[
+  This seems incredibly weird at first glance but it's actually super easy to show. It's easy to see that the determinant of a triangular matrix is the product of the diagonal entries. By the Schur Decomposition, every matrix can be written as $J T J^(-1)$ for some triangular matrix $T$. We immediately obtain the determinant is equal to the product of eigenvalues. Similarly, cyclic invariance of the trace tells us the trace is equal to the sum of eigenvalues. Finally, Taylor expansions tell you that $f(A)$ eigenvalues $f(lambda(A))$. That's it!
+]
+
+This can be used as a practical approximation to the determinant via the Hutchinson Trace Estimator.
+
 
 = Decompositions
 
