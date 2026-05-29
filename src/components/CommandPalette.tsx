@@ -2,48 +2,21 @@ import { Command } from "cmdk";
 import { useState, useEffect, useCallback } from "react";
 import { createPortal } from "react-dom";
 
-export interface PalettePost {
-  id: string;
-  title: string;
-  section: string;
-  url: string;
+export interface PaletteItem {
+  label: string;
+  href: string;
+  group: "page" | "post" | "heading";
+  badge?: string;
+  indent?: number;
+  postId?: string;
+  keywords?: string;
 }
-
-export interface PaletteHeading {
-  text: string;
-  level: number;
-  slug: string;
-  postId: string;
-  postTitle: string;
-  postUrl: string;
-}
-
-const SECTION_LABEL: Record<string, string> = {
-  article: "Blog",
-  notes: "Notes",
-  local: "Local",
-};
-
-const MAIN_PAGES = [
-  { label: "Blog",  url: "/blog"  },
-  { label: "Notes", url: "/notes" },
-];
-
-const DEV_PAGES = [
-  { label: "Local", url: "/local" },
-];
-
-interface ShownHeading { text: string; level: number; href: string; context?: string }
 
 export default function CommandPalette({
-  posts,
-  dev,
-  postHeadings,
+  items,
   currentPostId,
 }: {
-  posts: PalettePost[];
-  dev: boolean;
-  postHeadings: PaletteHeading[];
+  items: PaletteItem[];
   currentPostId?: string;
 }) {
   const [open, setOpen] = useState(false);
@@ -51,11 +24,8 @@ export default function CommandPalette({
 
   const headingMode = query.startsWith("#");
   const headingQuery = headingMode ? query.slice(1).toLowerCase() : "";
-
-  const currentHeadings = currentPostId
-    ? postHeadings.filter((h) => h.postId === currentPostId)
-    : [];
-  const onContentPage = currentHeadings.length > 0;
+  const onContentPage = items.some(i => i.group === "heading" && i.postId === currentPostId);
+  const crossPost = headingMode && !onContentPage;
 
   const show = useCallback(() => { setQuery(""); setOpen(true); }, []);
   const hide = useCallback(() => { setOpen(false); setQuery(""); }, []);
@@ -81,20 +51,21 @@ export default function CommandPalette({
     return () => document.removeEventListener("keydown", down);
   }, [show, hide]);
 
-  const shownHeadings: ShownHeading[] = headingMode
+  const visibleItems = headingMode
     ? onContentPage
-      ? currentHeadings
-          .filter((h) => h.text.toLowerCase() !== "outline" && (!headingQuery || h.text.toLowerCase().includes(headingQuery)))
-          .map((h) => ({ text: h.text, level: h.level, href: `#${h.slug}` }))
-      : headingQuery.length > 0
-        ? postHeadings
-            .filter((h) =>
-              h.text.toLowerCase().includes(headingQuery) ||
-              h.postTitle.toLowerCase().includes(headingQuery),
-            )
-            .map((h) => ({ text: h.text, level: h.level, href: `${h.postUrl}#${h.slug}`, context: h.postTitle }))
+      ? items.filter(i =>
+          i.group === "heading" &&
+          i.postId === currentPostId &&
+          i.label.toLowerCase() !== "outline" &&
+          (!headingQuery || i.label.toLowerCase().includes(headingQuery))
+        )
+      : headingQuery
+        ? items.filter(i =>
+            i.group === "heading" &&
+            (i.label.toLowerCase().includes(headingQuery) || i.badge?.toLowerCase().includes(headingQuery))
+          )
         : []
-    : [];
+    : items.filter(i => i.group !== "heading");
 
   const navigate = useCallback((href: string) => {
     hide();
@@ -111,9 +82,7 @@ export default function CommandPalette({
     ? (!onContentPage && !headingQuery ? "Type to search headings across posts." : "No headings found.")
     : "No pages found.";
 
-  const groupLabel = headingMode
-    ? (onContentPage ? "Headings" : "Headings — all posts")
-    : "";
+  const groupLabel = headingMode ? (onContentPage ? "Headings" : "Headings — all posts") : "";
 
   return (
     <>
@@ -155,44 +124,32 @@ export default function CommandPalette({
                 <Command.Empty>{emptyMsg}</Command.Empty>
                 {headingMode ? (
                   <Command.Group heading={groupLabel}>
-                    {shownHeadings.map((h, i) => (
-                      <Command.Item
-                        key={i}
-                        value={h.text}
-                        onSelect={() => navigate(h.href)}
-                      >
+                    {visibleItems.map((item, i) => (
+                      <Command.Item key={i} value={item.label} onSelect={() => navigate(item.href)}>
                         <span
                           className="cp-title cp-title--heading"
-                          style={{ paddingLeft: `${(h.level - 2) * 0.9}rem` }}
+                          style={item.indent ? { paddingLeft: `${item.indent}rem` } : undefined}
                         >
-                          {h.text}
+                          {item.label}
                         </span>
-                        {h.context && <span className="cp-badge">{h.context}</span>}
+                        {crossPost && item.badge && <span className="cp-badge">{item.badge}</span>}
                       </Command.Item>
                     ))}
                   </Command.Group>
                 ) : (
                   <>
                     <Command.Group heading="Pages">
-                      {[...MAIN_PAGES, ...(dev ? DEV_PAGES : [])].map((page) => (
-                        <Command.Item
-                          key={page.url}
-                          value={page.label}
-                          onSelect={() => navigate(page.url)}
-                        >
-                          <span className="cp-title cp-title--page">{page.label}</span>
+                      {visibleItems.filter(i => i.group === "page").map((item) => (
+                        <Command.Item key={item.href} value={item.label} onSelect={() => navigate(item.href)}>
+                          <span className="cp-title cp-title--page">{item.label}</span>
                         </Command.Item>
                       ))}
                     </Command.Group>
                     <Command.Group heading="Posts">
-                      {posts.map((post) => (
-                        <Command.Item
-                          key={post.id}
-                          value={`${post.title} ${post.url}`}
-                          onSelect={() => navigate(post.url)}
-                        >
-                          <span className="cp-title">{post.title}</span>
-                          <span className="cp-badge">{SECTION_LABEL[post.section] ?? post.section}</span>
+                      {visibleItems.filter(i => i.group === "post").map((item) => (
+                        <Command.Item key={item.href} value={item.keywords ?? item.label} onSelect={() => navigate(item.href)}>
+                          <span className="cp-title">{item.label}</span>
+                          {item.badge && <span className="cp-badge">{item.badge}</span>}
                         </Command.Item>
                       ))}
                     </Command.Group>

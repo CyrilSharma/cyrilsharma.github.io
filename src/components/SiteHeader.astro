@@ -3,7 +3,13 @@ import { BASE_PATH } from "$consts";
 import { getCollection } from "astro:content";
 import { SECTION_URL, extractHeadings } from "../utils";
 import CommandPalette from "./CommandPalette";
-import type { PalettePost, PaletteHeading } from "./CommandPalette";
+import type { PaletteItem } from "./CommandPalette";
+
+const SECTION_LABEL: Record<string, string> = {
+  article: "Blog",
+  notes: "Notes",
+  local: "Local",
+};
 
 const urlPath = Astro.url.pathname;
 const isActive = (segment: string) => {
@@ -13,20 +19,42 @@ const isActive = (segment: string) => {
 const dev = import.meta.env.DEV;
 
 const allPosts = await getCollection("blog");
-const posts: PalettePost[] = allPosts
-  .filter((p) => dev || p.data.section !== "local")
-  .map((p) => ({
-    id: p.id,
-    title: p.data.title,
-    section: p.data.section,
-    url: `${BASE_PATH}/${SECTION_URL[p.data.section] ?? p.data.section}/${p.id}/`,
+const filteredPosts = allPosts.filter((p) => dev || p.data.section !== "local");
+
+const pageItems: PaletteItem[] = [
+  { label: "Blog",  href: `${BASE_PATH}/blog`,  group: "page" },
+  { label: "Notes", href: `${BASE_PATH}/notes`, group: "page" },
+  ...(dev ? [{ label: "Local", href: `${BASE_PATH}/local`, group: "page" as const }] : []),
+];
+
+const postItems: PaletteItem[] = filteredPosts.map((p) => {
+  const href = `${BASE_PATH}/${SECTION_URL[p.data.section] ?? p.data.section}/${p.id}/`;
+  return {
+    label: p.data.title,
+    href,
+    group: "post",
+    badge: SECTION_LABEL[p.data.section] ?? p.data.section,
+    keywords: `${p.data.title} ${href}`,
+  };
+});
+
+const headingItems: PaletteItem[] = filteredPosts.flatMap((p) => {
+  const href = `${BASE_PATH}/${SECTION_URL[p.data.section] ?? p.data.section}/${p.id}/`;
+  return extractHeadings(p.id, p.data.title, href).map((h) => ({
+    label: h.text,
+    href: `${href}#${h.slug}`,
+    group: "heading" as const,
+    badge: p.data.title,
+    indent: (h.level - 2) * 0.9,
+    postId: p.id,
   }));
+});
 
-const postHeadings: PaletteHeading[] = posts.flatMap((p) =>
-  extractHeadings(p.id, p.title, p.url),
-);
-
-const currentPostId = posts.find((p) => urlPath === p.url || urlPath === p.url.replace(/\/$/, ""))?.id;
+const items: PaletteItem[] = [...pageItems, ...postItems, ...headingItems];
+const currentPostId = filteredPosts.find((p) => {
+  const href = `${BASE_PATH}/${SECTION_URL[p.data.section] ?? p.data.section}/${p.id}/`;
+  return urlPath === href || urlPath === href.replace(/\/$/, "");
+})?.id;
 ---
 
 <script>
@@ -43,7 +71,7 @@ const currentPostId = posts.find((p) => urlPath === p.url || urlPath === p.url.r
     <a href={`${BASE_PATH}/blog`} class={isActive("blog") ? "active" : ""}>Blog</a>
     <a href={`${BASE_PATH}/notes`} class={isActive("notes") ? "active" : ""}>Notes</a>
     {dev && <a href={`${BASE_PATH}/local`} class={isActive("local") ? "active" : ""}>Local</a>}
-    <CommandPalette posts={posts} dev={dev} postHeadings={postHeadings} currentPostId={currentPostId} client:load />
+    <CommandPalette items={items} currentPostId={currentPostId} client:load />
   </nav>
   <hr />
 </header>
