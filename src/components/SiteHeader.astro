@@ -25,14 +25,25 @@ const posts: PalettePost[] = allPosts
 const postHeadings: PaletteHeading[] = posts.flatMap((p) =>
   extractHeadings(p.id, p.title, p.url),
 );
+
+const currentPostId = posts.find((p) => urlPath === p.url || urlPath === p.url.replace(/\/$/, ""))?.id;
 ---
+
+<script>
+  const setHeaderHeight = () => {
+    const h = document.querySelector("header")?.getBoundingClientRect().height ?? 0;
+    document.documentElement.style.setProperty("--header-h", `${h}px`);
+  };
+  setHeaderHeight();
+  window.addEventListener("resize", setHeaderHeight);
+</script>
 
 <header>
   <nav>
     <a href={`${BASE_PATH}/blog`} class={isActive("blog") ? "active" : ""}>Blog</a>
     <a href={`${BASE_PATH}/notes`} class={isActive("notes") ? "active" : ""}>Notes</a>
     {dev && <a href={`${BASE_PATH}/local`} class={isActive("local") ? "active" : ""}>Local</a>}
-    <CommandPalette posts={posts} dev={dev} postHeadings={postHeadings} client:load />
+    <CommandPalette posts={posts} dev={dev} postHeadings={postHeadings} currentPostId={currentPostId} client:load />
   </nav>
   <hr />
 </header>
@@ -212,6 +223,10 @@ const postHeadings: PaletteHeading[] = posts.flatMap((p) =>
   .cp-title--heading {
     font-size: 0.9rem;
     opacity: 0.85;
+  }
+
+  .prose h2, .prose h3, .prose h4, .prose h5, .prose h6 {
+    scroll-margin-top: calc(var(--header-h, 60px) + 8px);
   }
 
   .cp-badge {

@@ -33,26 +33,29 @@ const DEV_PAGES = [
   { label: "Local", url: "/local" },
 ];
 
-interface LocalHeading { text: string; level: number; slug: string }
-
 interface ShownHeading { text: string; level: number; href: string; context?: string }
 
 export default function CommandPalette({
   posts,
   dev,
   postHeadings,
+  currentPostId,
 }: {
   posts: PalettePost[];
   dev: boolean;
   postHeadings: PaletteHeading[];
+  currentPostId?: string;
 }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
-  const [pageHeadings, setPageHeadings] = useState<LocalHeading[]>([]);
 
   const headingMode = query.startsWith("#");
   const headingQuery = headingMode ? query.slice(1).toLowerCase() : "";
-  const onContentPage = pageHeadings.length > 0;
+
+  const currentHeadings = currentPostId
+    ? postHeadings.filter((h) => h.postId === currentPostId)
+    : [];
+  const onContentPage = currentHeadings.length > 0;
 
   const show = useCallback(() => { setQuery(""); setOpen(true); }, []);
   const hide = useCallback(() => { setOpen(false); setQuery(""); }, []);
@@ -60,11 +63,6 @@ export default function CommandPalette({
   useEffect(() => {
     if (open) {
       document.body.style.overflow = "hidden";
-      const hs: LocalHeading[] = [];
-      document.querySelectorAll(".prose h2, .prose h3, .prose h4, .prose h5, .prose h6").forEach((el) => {
-        if (el.id) hs.push({ text: el.textContent?.trim() ?? "", level: parseInt(el.tagName[1]), slug: el.id });
-      });
-      setPageHeadings(hs);
       return () => { document.body.style.overflow = ""; };
     }
   }, [open]);
@@ -85,7 +83,7 @@ export default function CommandPalette({
 
   const shownHeadings: ShownHeading[] = headingMode
     ? onContentPage
-      ? pageHeadings
+      ? currentHeadings
           .filter((h) => h.text.toLowerCase() !== "outline" && (!headingQuery || h.text.toLowerCase().includes(headingQuery)))
           .map((h) => ({ text: h.text, level: h.level, href: `#${h.slug}` }))
       : headingQuery.length > 0
@@ -102,11 +100,7 @@ export default function CommandPalette({
     hide();
     if (href.startsWith("#")) {
       const el = document.getElementById(href.slice(1));
-      if (el) {
-        const headerH = document.querySelector("header")?.getBoundingClientRect().height ?? 0;
-        const top = el.getBoundingClientRect().top + window.scrollY - headerH - 8;
-        window.scrollTo({ top, behavior: "smooth" });
-      }
+      if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
       window.history.pushState(null, "", href);
     } else {
       window.location.href = href;
