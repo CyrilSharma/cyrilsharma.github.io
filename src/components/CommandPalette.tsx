@@ -106,6 +106,7 @@ export default function CommandPalette({
         <div className="cp-backdrop" onClick={hide}>
           <div className="cp-modal" onMouseDown={(e) => e.preventDefault()} onClick={(e) => e.stopPropagation()}>
             <Command
+              loop
               shouldFilter={!headingMode && !commandMode}
               onKeyDown={(e) => {
                 if (e.key === "Tab") {
