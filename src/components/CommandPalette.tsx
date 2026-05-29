@@ -5,7 +5,7 @@ import { createPortal } from "react-dom";
 export interface PaletteItem {
   label: string;
   href: string;
-  group: "page" | "post" | "heading";
+  group: "page" | "post" | "heading" | "command";
   badge?: string;
   indent?: number;
   postId?: string;
@@ -23,7 +23,9 @@ export default function CommandPalette({
   const [query, setQuery] = useState("");
 
   const headingMode = query.startsWith("#");
+  const commandMode = query.startsWith(">");
   const headingQuery = headingMode ? query.slice(1).toLowerCase() : "";
+  const commandQuery = commandMode ? query.slice(1).toLowerCase().trim() : "";
   const onContentPage = items.some(i => i.group === "heading" && i.postId === currentPostId);
   const crossPost = headingMode && !onContentPage;
 
@@ -65,7 +67,12 @@ export default function CommandPalette({
             (i.label.toLowerCase().includes(headingQuery) || i.badge?.toLowerCase().includes(headingQuery))
           )
         : []
-    : items.filter(i => i.group !== "heading");
+    : commandMode
+      ? items.filter(i =>
+          i.group === "command" &&
+          (!commandQuery || i.label.toLowerCase().includes(commandQuery))
+        )
+      : items.filter(i => i.group !== "heading" && i.group !== "command");
 
   const navigate = useCallback((href: string) => {
     hide();
@@ -78,11 +85,13 @@ export default function CommandPalette({
     }
   }, [hide]);
 
+  const placeholder = headingMode ? "Jump to heading…" : commandMode ? "Run command…" : "Where to?";
+
   const emptyMsg = headingMode
     ? (!onContentPage && !headingQuery ? "Type to search headings across posts." : "No headings found.")
-    : "No pages found.";
-
-  const groupLabel = headingMode ? (onContentPage ? "Headings" : "Headings — all posts") : "";
+    : commandMode
+      ? "No commands found."
+      : "No pages found.";
 
   return (
     <>
@@ -97,7 +106,7 @@ export default function CommandPalette({
         <div className="cp-backdrop" onClick={hide}>
           <div className="cp-modal" onMouseDown={(e) => e.preventDefault()} onClick={(e) => e.stopPropagation()}>
             <Command
-              shouldFilter={!headingMode}
+              shouldFilter={!headingMode && !commandMode}
               onKeyDown={(e) => {
                 if (e.key === "Tab") {
                   e.preventDefault();
@@ -108,7 +117,7 @@ export default function CommandPalette({
             >
               <div className="cp-input-row">
                 <Command.Input
-                  placeholder={headingMode ? "Jump to heading…" : "Where to?"}
+                  placeholder={placeholder}
                   autoFocus
                   onBlur={hide}
                   value={query}
@@ -123,7 +132,7 @@ export default function CommandPalette({
               <Command.List>
                 <Command.Empty>{emptyMsg}</Command.Empty>
                 {headingMode ? (
-                  <Command.Group heading={groupLabel}>
+                  <Command.Group heading={onContentPage ? "Headings" : "Headings — all posts"}>
                     {visibleItems.map((item, i) => (
                       <Command.Item key={i} value={item.label} onSelect={() => navigate(item.href)}>
                         <span
@@ -133,6 +142,14 @@ export default function CommandPalette({
                           {item.label}
                         </span>
                         {crossPost && item.badge && <span className="cp-badge">{item.badge}</span>}
+                      </Command.Item>
+                    ))}
+                  </Command.Group>
+                ) : commandMode ? (
+                  <Command.Group heading="Commands">
+                    {visibleItems.map((item) => (
+                      <Command.Item key={item.href} value={item.label} onSelect={() => navigate(item.href)}>
+                        <span className="cp-title">{item.label}</span>
                       </Command.Item>
                     ))}
                   </Command.Group>

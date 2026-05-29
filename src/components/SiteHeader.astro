@@ -50,11 +50,21 @@ const headingItems: PaletteItem[] = filteredPosts.flatMap((p) => {
   }));
 });
 
-const items: PaletteItem[] = [...pageItems, ...postItems, ...headingItems];
 const currentPostId = filteredPosts.find((p) => {
   const href = `${BASE_PATH}/${SECTION_URL[p.data.section] ?? p.data.section}/${p.id}/`;
   return urlPath === href || urlPath === href.replace(/\/$/, "");
 })?.id;
+
+const currentPost = currentPostId ? filteredPosts.find(p => p.id === currentPostId) : undefined;
+const commandItems: PaletteItem[] = currentPost
+  ? [{
+      label: "View Raw",
+      href: `${BASE_PATH}/${SECTION_URL[currentPost.data.section] ?? currentPost.data.section}/${currentPost.id}/raw.txt`,
+      group: "command",
+    }]
+  : [];
+
+const items: PaletteItem[] = [...pageItems, ...postItems, ...headingItems, ...commandItems];
 ---
 
 <script>
