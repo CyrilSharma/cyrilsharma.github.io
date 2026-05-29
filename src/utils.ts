@@ -3,6 +3,64 @@ import { join, resolve } from "path";
 import * as cheerio from "cheerio";
 import { getCollection } from "astro:content";
 
+function slugify(text: string): string {
+  return (
+    text
+      .toLowerCase()
+      .trim()
+      .replace(/[^\w\s]/g, "")
+      .replace(/\s+/g, "-")
+      .replace(/-+/g, "-")
+      .replace(/^-|-$/g, "") || "section"
+  );
+}
+
+function addHeadingIds($: cheerio.CheerioAPI): void {
+  const counts: Record<string, number> = {};
+  $("h2, h3, h4, h5, h6").each((_, el) => {
+    if ($(el).attr("id")) return;
+    const base = slugify($(el).text().trim());
+    const n = counts[base] ?? 0;
+    counts[base] = n + 1;
+    $(el).attr("id", n === 0 ? base : `${base}-${n}`);
+  });
+}
+
+function loadAndProcess(filePath: string): cheerio.CheerioAPI {
+  const $ = cheerio.load(readFileSync(filePath, "utf-8"));
+  wrapInlineEquations($);
+  addHeadingIds($);
+  return $;
+}
+
+export function processPostHtml(file: string): string {
+  return loadAndProcess(file).html();
+}
+
+export function extractHeadings(
+  id: string,
+  postTitle: string,
+  postUrl: string,
+): Array<{ text: string; level: number; slug: string; postId: string; postTitle: string; postUrl: string }> {
+  try {
+    const $ = loadAndProcess(resolve("html", id, "index.html"));
+    const result: ReturnType<typeof extractHeadings> = [];
+    $("h2, h3, h4, h5, h6").each((_, el) => {
+      result.push({
+        text: $(el).text().trim(),
+        level: parseInt(el.tagName.slice(1)),
+        slug: $(el).attr("id") ?? "",
+        postId: id,
+        postTitle,
+        postUrl,
+      });
+    });
+    return result;
+  } catch {
+    return [];
+  }
+}
+
 export const SECTION_URL: Record<string, string> = {
   article: "blog",
   notes: "notes",
@@ -61,9 +119,7 @@ export async function getPostList({ section }: { section?: string } = {}) {
 
 export function extractPreview(id: string): string {
   try {
-    const raw = readFileSync(resolve("html", id, "index.html"), "utf-8");
-    const $ = cheerio.load(raw);
-    wrapInlineEquations($);
+    const $ = loadAndProcess(resolve("html", id, "index.html"));
     $("script, nav, img, h1, h2, h3").remove();
 
     const blocks: string[] = [];

@@ -1,9 +1,9 @@
 ---
 import { BASE_PATH } from "$consts";
 import { getCollection } from "astro:content";
-import { SECTION_URL } from "../utils";
+import { SECTION_URL, extractHeadings } from "../utils";
 import CommandPalette from "./CommandPalette";
-import type { PalettePost } from "./CommandPalette";
+import type { PalettePost, PaletteHeading } from "./CommandPalette";
 
 const urlPath = Astro.url.pathname;
 const isActive = (segment: string) => {
@@ -21,6 +21,10 @@ const posts: PalettePost[] = allPosts
     section: p.data.section,
     url: `${BASE_PATH}/${SECTION_URL[p.data.section] ?? p.data.section}/${p.id}/`,
   }));
+
+const postHeadings: PaletteHeading[] = posts.flatMap((p) =>
+  extractHeadings(p.id, p.title, p.url),
+);
 ---
 
 <header>
@@ -28,7 +32,7 @@ const posts: PalettePost[] = allPosts
     <a href={`${BASE_PATH}/blog`} class={isActive("blog") ? "active" : ""}>Blog</a>
     <a href={`${BASE_PATH}/notes`} class={isActive("notes") ? "active" : ""}>Notes</a>
     {dev && <a href={`${BASE_PATH}/local`} class={isActive("local") ? "active" : ""}>Local</a>}
-    <CommandPalette posts={posts} dev={dev} client:load />
+    <CommandPalette posts={posts} dev={dev} postHeadings={postHeadings} client:load />
   </nav>
   <hr />
 </header>
@@ -204,6 +208,10 @@ const posts: PalettePost[] = allPosts
   .cp-title--page {
     font-weight: 700;
     color: var(--gold);
+  }
+  .cp-title--heading {
+    font-size: 0.9rem;
+    opacity: 0.85;
   }
 
   .cp-badge {
