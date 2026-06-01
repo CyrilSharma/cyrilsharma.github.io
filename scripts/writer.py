@@ -1,92 +1,49 @@
 #!/usr/bin/env python3
 from rich.console import Console
 from rich.prompt import Prompt
-import datetime
-import os
-import sys
+import randomname
+import datetime, os, sys
 
 console = Console()
+LOCAL_DIR = "./local/article"
 
-SECTION_DIRS = {
-    "blog":  "./content/article",
-    "notes": "./content/notes",
-    "local": "./local/article",
-}
-
-def iso_timestamp() -> str:
-    """
-    Return current local time (no microseconds) in ISO 8601 form with offset.
-    E.g.: "2025-05-23T18:42:10-04:00"
-    """
+def iso_timestamp():
     now = datetime.datetime.now().astimezone().replace(microsecond=0)
     return now.isoformat()
 
-def prompt_nonempty(prompt_text: str) -> str:
-    """
-    Prompt the user until they enter a non-empty string.
-    """
-    while True:
-        response = Prompt.ask(prompt_text).strip()
-        if response:
-            return response
-        console.print("[red]Input cannot be empty. Please try again.[/red]")
+def main():
+    console.print("\n[bold underline]New Draft[/bold underline]\n")
 
-def create_new_typst_file():
-    # Ask for filename
-    while True:
-        title = prompt_nonempty("[cyan]Enter title[/cyan]").title()
-        filename = title.lower().replace(" ", "-")
-        if os.path.exists(filename):
-            console.print(f"[red]Error:[/red] '{title}' already exists. Please choose a different title.")
-            continue
-        break
+    raw = Prompt.ask("[cyan]Title[/cyan] (leave blank to generate)").strip()
+    if raw:
+        title = raw.title()
+        slug = raw.lower().replace(" ", "-")
+    else:
+        slug = randomname.get_name()
+        title = slug.replace("-", " ").title()
 
-    # Ask which section
-    section = Prompt.ask("[cyan]Section[/cyan]", choices=["blog", "notes", "local"], default="blog")
+    os.makedirs(LOCAL_DIR, exist_ok=True)
+    filepath = f"{LOCAL_DIR}/{slug}.typ"
 
-    # Ask for description, tags
-    description = ""
-    raw_tags = prompt_nonempty("[cyan]Enter comma-separated tags (e.g. evolution,cs)[/cyan]")
-
-    # Build ISO timestamp string once
-    timestamp = iso_timestamp()
-
-    # Parse tags: split by comma, strip whitespace, wrap each in quotes
-    tag_list = [tag.strip() for tag in raw_tags.split(",") if tag.strip()]
-    if not tag_list:
-        console.print("[red]Error:[/red] At least one tag is required.")
+    if os.path.exists(filepath):
+        console.print(f"[red]Error:[/red] '{filepath}' already exists.")
         sys.exit(1)
-    tags_field = ", ".join(f"\"{t}\"" for t in tag_list)
-    if len(tag_list) == 1:
-        tags_field += ","
 
-    # Construct the Typst content
     content = (
         '#import "/typ/templates/blog.typ": *\n'
         "#show: main.with(\n"
         f'  title: "{title}",\n'
-        f'  desc: "{description}",\n'
-        f'  date: "{timestamp}",\n'
-        f'  tags: ({tags_field}),\n'
+        f'  desc: "",\n'
+        f'  date: "{iso_timestamp()}",\n'
+        f'  tags: (),\n'
         ")\n"
     )
 
-    # Write to file
-    dest = SECTION_DIRS[section]
-    os.makedirs(dest, exist_ok=True)
-    filepath = f"{dest}/{filename}.typ"
-    try:
-        with open(filepath, "w", encoding="utf-8") as f:
-            f.write(content)
-        console.print(f"\n✅ [green]Created:[/green] [bold]{filepath}[/bold]")
-        console.print(f"🔗 [green]URL:[/green] [bold]http://localhost:4321/{section}/{filename}/[/bold]")
-    except OSError as e:
-        console.print(f"[red]Error writing file:[/red] {e}")
-        sys.exit(1)
+    with open(filepath, "w", encoding="utf-8") as f:
+        f.write(content)
 
-def main():
-    console.print("\n[bold underline]Typst Blog Helper[/bold underline]\n")
-    create_new_typst_file()
+    console.print(f"\n[green]Created:[/green] [bold]{filepath}[/bold]")
+    console.print(f"[green]Open:[/green]    [bold]open -a CotEditor {filepath}[/bold]")
 
 if __name__ == "__main__":
     main()
