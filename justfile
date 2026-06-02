@@ -5,3 +5,6 @@ write:
 publish:
   export TYPST_ROOT='/Users/csharma/CS/Blog'
   ./.venv/bin/python ./scripts/publisher.py
+
+push:
+  ./.venv/bin/python ./scripts/push.py
