@@ -3,13 +3,13 @@ import { getCollection } from "astro:content";
 
 export async function getStaticPaths() {
   const posts = await getCollection("blog");
-  const articleSlugs = posts
-    .filter((p) => p.data.section === "article")
-    .map((p) => p.id);
+  const blogSlugs = posts
+    .filter((p) => p.data.section === "blog")
+    .map((p) => p.data.slug);
 
   return [
     { params: { path: undefined } },           // /Blog/ → /blog/
-    ...articleSlugs.map((slug) => ({ params: { path: slug } })), // /Blog/slug/ → /blog/slug/
+    ...blogSlugs.map((slug) => ({ params: { path: slug } })), // /Blog/slug/ → /blog/slug/
   ];
 }
 

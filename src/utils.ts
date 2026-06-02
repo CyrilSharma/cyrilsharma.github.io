@@ -62,7 +62,7 @@ export function extractHeadings(
 }
 
 export const SECTION_URL: Record<string, string> = {
-  article: "blog",
+  blog: "blog",
   notes: "notes",
   local: "local",
 };
@@ -71,7 +71,7 @@ export async function getPostStaticPaths(section: string) {
   return (await getCollection("blog"))
     .filter((p) => p.data.section === section)
     .map((p) => ({
-      params: { slug: p.id },
+      params: { slug: p.data.slug },
       props: { file: join("html", p.id, "index.html"), slug: p.id },
     }));
 }
@@ -105,6 +105,7 @@ export async function getPostList({ section }: { section?: string } = {}) {
           : new Date(displayDate as unknown as string).valueOf();
       return {
         id: post.id,
+        slug: post.data.slug,
         title: post.data.title,
         date: displayDate,
         dateMs,

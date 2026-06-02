@@ -37,7 +37,7 @@ export async function GET(context) {
         typeof post.data.desc === "string" ? post.data.desc : "",
       pubDate: post.data.updatedDate ?? post.data.date,
       categories: post.data.tags ?? [],
-      link: `${BASE_PATH}/${SECTION_URL[post.data.section] ?? post.data.section}/${post.id}/`,
+      link: `${BASE_PATH}/${SECTION_URL[post.data.section] ?? post.data.section}/${post.data.slug}/`,
       content: readPostHtml(post.id),
     })),
   });

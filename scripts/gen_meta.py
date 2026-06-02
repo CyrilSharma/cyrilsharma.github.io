@@ -3,7 +3,7 @@
 Generate a meta.json file by querying Typst frontmatter.
 
 Usage:
-  python scripts/gen_meta.py --out meta.json --root . --features html content/article/foo.typ ...
+  python scripts/gen_meta.py --out meta.json --root . --features html content/blog/foo.typ ...
 """
 
 import argparse
@@ -73,39 +73,49 @@ def main(argv) -> int:
     parts = path.parts
     if "local" in parts:
       return "local"
-    # Use the immediate parent directory name as the section.
     return path.parent.name
 
-  meta = {}
+  seen = set()
+  meta = []
   for src in args.files:
     path = Path(src)
     slug = path.stem
+    section = section_for(path)
     entry = query_frontmatter(path, root, args.features)
-    entry["section"] = section_for(path)
-    meta[slug] = entry
+    entry["id"] = f"{section}/{slug}"
+    entry["slug"] = slug
+    entry["section"] = section
+    seen.add(entry["id"])
+    meta.append(entry)
 
   # Add any manual/generated HTML folders not covered by Typst sources.
+  # Expected layout: html/<section>/<slug>/index.html
   html_dir = Path(args.html_dir)
   if html_dir.exists():
-    for html_subdir in html_dir.iterdir():
-      if not html_subdir.is_dir():
+    for section_dir in html_dir.iterdir():
+      if not section_dir.is_dir():
         continue
-      index_path = html_subdir / "index.html"
-      if not index_path.exists():
-        continue
-      slug = html_subdir.name
-      if slug in meta:
-        continue
-      # Default metadata when no frontmatter is available.
-      mtime = index_path.stat().st_mtime
-      meta[slug] = {
-        "title": slug.replace("-", " ").replace("_", " ").title(),
-        "author": "",
-        "desc": "",
-        "date": __import__("datetime").datetime.fromtimestamp(mtime).isoformat(),
-        "updatedDate": "",
-        "tags": [],
-      }
+      for html_subdir in section_dir.iterdir():
+        if not html_subdir.is_dir():
+          continue
+        index_path = html_subdir / "index.html"
+        if not index_path.exists():
+          continue
+        entry_id = f"{section_dir.name}/{html_subdir.name}"
+        if entry_id in seen:
+          continue
+        mtime = index_path.stat().st_mtime
+        meta.append({
+          "id": entry_id,
+          "slug": html_subdir.name,
+          "title": html_subdir.name.replace("-", " ").replace("_", " ").title(),
+          "author": "",
+          "desc": "",
+          "date": __import__("datetime").datetime.fromtimestamp(mtime).isoformat(),
+          "updatedDate": "",
+          "tags": [],
+          "section": section_dir.name,
+        })
 
   with out_path.open("w", encoding="utf-8") as f:
     json.dump(meta, f, indent=2, ensure_ascii=False)

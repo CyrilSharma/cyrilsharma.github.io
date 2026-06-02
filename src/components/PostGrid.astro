@@ -4,6 +4,7 @@ import { formatDate } from "../utils";
 
 interface Post {
   id: string;
+  slug: string;
   title: string;
   date: string | Date;
   preview?: string;
@@ -22,7 +23,7 @@ const { posts, basePath } = Astro.props;
   <div class="pg-grid">
     {posts.map((post) => (
       <article class="pg-card">
-        <a class="pg-card-link" href={`${basePath}/${post.id}/`} aria-label={post.title}></a>
+        <a class="pg-card-link" href={`${basePath}/${post.slug}/`} aria-label={post.title}></a>
         <h2 class="pg-title">{post.title}</h2>
         <div class="date">{formatDate(post.date)}</div>
         {post.preview && <div class="pg-frame-wrapper" set:html={post.preview} />}

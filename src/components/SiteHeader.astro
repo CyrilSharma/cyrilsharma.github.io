@@ -6,7 +6,7 @@ import CommandPalette from "./CommandPalette";
 import type { PaletteItem } from "./CommandPalette";
 
 const SECTION_LABEL: Record<string, string> = {
-  article: "Blog",
+  blog: "Blog",
   notes: "Notes",
   local: "Local",
 };
@@ -28,7 +28,7 @@ const pageItems: PaletteItem[] = [
 ];
 
 const postItems: PaletteItem[] = filteredPosts.map((p) => {
-  const href = `${BASE_PATH}/${SECTION_URL[p.data.section] ?? p.data.section}/${p.id}/`;
+  const href = `${BASE_PATH}/${SECTION_URL[p.data.section] ?? p.data.section}/${p.data.slug}/`;
   return {
     label: p.data.title,
     href,
@@ -39,7 +39,7 @@ const postItems: PaletteItem[] = filteredPosts.map((p) => {
 });
 
 const headingItems: PaletteItem[] = filteredPosts.flatMap((p) => {
-  const href = `${BASE_PATH}/${SECTION_URL[p.data.section] ?? p.data.section}/${p.id}/`;
+  const href = `${BASE_PATH}/${SECTION_URL[p.data.section] ?? p.data.section}/${p.data.slug}/`;
   return extractHeadings(p.id, p.data.title, href).map((h) => ({
     label: h.text,
     href: `${href}#${h.slug}`,
@@ -51,7 +51,7 @@ const headingItems: PaletteItem[] = filteredPosts.flatMap((p) => {
 });
 
 const currentPostId = filteredPosts.find((p) => {
-  const href = `${BASE_PATH}/${SECTION_URL[p.data.section] ?? p.data.section}/${p.id}/`;
+  const href = `${BASE_PATH}/${SECTION_URL[p.data.section] ?? p.data.section}/${p.data.slug}/`;
   return urlPath === href || urlPath === href.replace(/\/$/, "");
 })?.id;
 
@@ -59,7 +59,7 @@ const currentPost = currentPostId ? filteredPosts.find(p => p.id === currentPost
 const commandItems: PaletteItem[] = currentPost
   ? [{
       label: "View Raw",
-      href: `${BASE_PATH}/${SECTION_URL[currentPost.data.section] ?? currentPost.data.section}/${currentPost.id}/raw.txt`,
+      href: `${BASE_PATH}/${SECTION_URL[currentPost.data.section] ?? currentPost.data.section}/${currentPost.data.slug}/raw.txt`,
       group: "command",
     }]
   : [];

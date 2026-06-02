@@ -3,7 +3,7 @@ import questionary
 import datetime, os, re, sys
 LOCAL_DIR = "./local/article"
 SECTION_DIRS = {
-    "blog":  "./content/article",
+    "blog":  "./content/blog",
     "notes": "./content/notes",
 }
 

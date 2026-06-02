@@ -11,13 +11,9 @@ import * as cheerio from "cheerio";
 import { BASE_PATH } from "./src/site.mjs";
 
 const meta = JSON.parse(fs.readFileSync("./meta.json", "utf8"));
-const SECTION_URL = { article: "blog", notes: "notes", local: "local" };
-const rawPages = Object.entries(meta)
-  .filter(([, v]) => v.section !== "local")
-  .map(([slug, v]) => {
-    const prefix = SECTION_URL[v.section] ?? v.section;
-    return `https://cyrilsharma.github.io${BASE_PATH}/${prefix}/${slug}/raw.txt`;
-  });
+const rawPages = meta
+  .filter((v) => v.section !== "local")
+  .map((v) => `https://cyrilsharma.github.io${BASE_PATH}/${v.section}/${v.slug}/raw.txt`);
 
 // https://astro.build/config
 export default defineConfig({
@@ -46,20 +42,24 @@ export default defineConfig({
           }
 
           // Pre-populate cache from all existing html files
-          const elementCache = new Map(); // slug -> string[]
+          const elementCache = new Map(); // "section/slug" -> string[]
           if (fs.existsSync("./html")) {
-            for (const slug of fs.readdirSync("./html")) {
-              const f = `html/${slug}/index.html`;
-              if (fs.existsSync(f)) {
-                const body = fs.readFileSync(f, "utf8")
-                  .match(/<body[^>]*>([\s\S]*?)<\/body>/is)?.[1] ?? "";
-                elementCache.set(slug, parseElements(body));
+            for (const section of fs.readdirSync("./html")) {
+              const sectionPath = `html/${section}`;
+              if (!fs.statSync(sectionPath).isDirectory()) continue;
+              for (const slug of fs.readdirSync(sectionPath)) {
+                const f = `${sectionPath}/${slug}/index.html`;
+                if (fs.existsSync(f)) {
+                  const body = fs.readFileSync(f, "utf8")
+                    .match(/<body[^>]*>([\s\S]*?)<\/body>/is)?.[1] ?? "";
+                  elementCache.set(`${section}/${slug}`, parseElements(body));
+                }
               }
             }
           }
 
           const TYP_DIRS = {
-            "content/article": "blog",
+            "content/blog": "blog",
             "content/notes": "notes",
             "local/article": "local",
           };
@@ -91,14 +91,14 @@ export default defineConfig({
             if (!match) return next();
             const [, urlPrefix, slug] = match;
             if (typstWatchers.has(slug)) return next();
-            const typDirMap = { blog: "content/article", notes: "content/notes", local: "local/article" };
+            const typDirMap = { blog: "content/blog", notes: "content/notes", local: "local/article" };
             const typFile = `${typDirMap[urlPrefix]}/${slug}.typ`;
             if (fs.existsSync(typFile)) {
-              fs.mkdirSync(`html/${slug}`, { recursive: true });
+              fs.mkdirSync(`html/${urlPrefix}/${slug}`, { recursive: true });
               console.log(`[typst] starting watch for ${urlPrefix}/${slug}`);
               const proc = spawn(
                 "typst",
-                ["watch", typFile, `html/${slug}/index.html`,
+                ["watch", typFile, `html/${urlPrefix}/${slug}/index.html`,
                  "--format", "html", "--features", "html", "--root", "."],
                 { stdio: "inherit" }
               );
@@ -113,9 +113,10 @@ export default defineConfig({
           const pending = new Map();
           server.watcher.on("change", (file) => {
             if (!file.includes("/html/")) return;
-            const slugMatch = file.match(/\/html\/([^/]+)\//);
+            const slugMatch = file.match(/\/html\/([^/]+)\/([^/]+)\//);
             if (!slugMatch) return;
-            const slug = slugMatch[1];
+            const [, section, slug] = slugMatch;
+            const cacheKey = `${section}/${slug}`;
             if (pending.has(file)) clearTimeout(pending.get(file));
             pending.set(
               file,
@@ -124,8 +125,8 @@ export default defineConfig({
                 const full = fs.readFileSync(file, "utf8");
                 const body = full.match(/<body[^>]*>([\s\S]*?)<\/body>/is)?.[1] ?? full;
                 const newElements = parseElements(body);
-                const oldElements = elementCache.get(slug) ?? [];
-                elementCache.set(slug, newElements);
+                const oldElements = elementCache.get(cacheKey) ?? [];
+                elementCache.set(cacheKey, newElements);
 
                 let scrollIndex = -1;
                 for (let i = 0; i < Math.max(oldElements.length, newElements.length); i++) {

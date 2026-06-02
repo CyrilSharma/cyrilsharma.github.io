@@ -21,6 +21,7 @@ const blog = defineCollection({
   loader: file("meta.json"),
   schema: z.object({
     title: z.string(),
+    slug: z.string(),
     author: z.string().optional(),
     desc: z.any().optional(),
     date: z.union([z.string(), z.date()]).transform(parseDateInput),
@@ -29,7 +30,7 @@ const blog = defineCollection({
       .optional()
       .transform((val) => (val ? parseDateInput(val) : undefined)),
     tags: z.array(z.string()).default([]),
-    section: z.string().default("article"),
+    section: z.string().default("blog"),
   }),
 });
 
