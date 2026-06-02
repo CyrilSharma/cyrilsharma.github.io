@@ -682,6 +682,8 @@ The only real problem with this idea is that ODE and SDE solvers will accumulate
 // Add Flow Matching (main result is optimizing conditionals is the same as optimizing marginals?)
 // Add a math section, where we can derive the change of variables formula?
 // Maybe flow mapping stuff so you can explain skip connections.
+// Probably actually derive the DDIM trick because the clean image insight
+// Has quite a number of downstream applications.
 
 // TODO: Integration by parts / Divergence Theorem so I don't have to rederive stuff.
 // TODO: JS Divergence.
