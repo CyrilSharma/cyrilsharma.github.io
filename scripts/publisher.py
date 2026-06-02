@@ -1,9 +1,6 @@
 #!/usr/bin/env python3
-from rich.console import Console
-from rich.prompt import Prompt
-import datetime, os, re, shutil, subprocess, sys
-
-console = Console()
+import questionary
+import datetime, os, re, sys
 LOCAL_DIR = "./local/article"
 SECTION_DIRS = {
     "blog":  "./content/article",
@@ -64,55 +61,57 @@ def write_file(path, content):
         f.write(content)
 
 def main():
-    console.print("\n[bold underline]Publish Draft[/bold underline]\n")
-
     drafts = list_drafts()
     if not drafts:
-        console.print("[red]No drafts found in local/article.[/red]")
+        print("No drafts found in local/article.")
         sys.exit(1)
 
-    console.print("[cyan]Drafts (newest first):[/cyan]")
-    for i, (mtime, fname, _) in enumerate(drafts):
-        dt = datetime.datetime.fromtimestamp(mtime).strftime("%Y-%m-%d %H:%M")
-        console.print(f"  [bold]{i+1}[/bold]. {fname[:-4]}  [dim]{dt}[/dim]")
-
-    while True:
-        raw = Prompt.ask("\n[cyan]Pick a draft[/cyan]").strip()
-        if raw.isdigit() and 1 <= int(raw) <= len(drafts):
-            _, src_fname, src_path = drafts[int(raw) - 1]
-            break
-        console.print("[red]Invalid choice.[/red]")
-
+    choices = [
+        questionary.Choice(
+            title=f"{fname[:-4]}  ({datetime.datetime.fromtimestamp(mtime).strftime('%Y-%m-%d %H:%M')})",
+            value=(fname, path),
+        )
+        for mtime, fname, path in drafts
+    ]
+    picked = questionary.select("Pick a draft:", choices=choices).ask()
+    if not picked:
+        sys.exit(0)
+    src_fname, src_path = picked
     local_slug = src_fname[:-4]
     section, dest_path = find_published(local_slug)
 
     if dest_path:
-        # Re-publish: read metadata from existing published file
         with open(dest_path) as f:
             existing = f.read()
         title, tags = extract_meta(existing)
         slug = local_slug
-        console.print(f"[dim]Updating existing: {dest_path}[/dim]")
+        print(f"Updating existing: {dest_path}")
     else:
-        # First publish: prompt for everything
-        section = Prompt.ask("[cyan]Section[/cyan]", choices=["blog", "notes"], default="blog")
+        section = questionary.select("Section:", choices=["blog", "notes"]).ask()
+        if not section:
+            sys.exit(0)
 
-        raw_name = Prompt.ask("[cyan]Name[/cyan]", default=local_slug).strip()
-        slug = raw_name.lower().replace(" ", "-")
-        title = raw_name.replace("-", " ").title()
+        raw_name = questionary.text("Name:", default=local_slug).ask()
+        if not raw_name:
+            sys.exit(0)
+        slug = raw_name.strip().lower().replace(" ", "-")
+        title = raw_name.strip().replace("-", " ").title()
 
         while True:
-            raw_tags = Prompt.ask("[cyan]Tags (comma-separated)[/cyan]").strip()
+            raw_tags = questionary.text("Tags (comma-separated):").ask()
+            if raw_tags is None:
+                sys.exit(0)
             tags = [t.strip() for t in raw_tags.split(",") if t.strip()]
             if tags:
                 break
-            console.print("[red]At least one tag is required.[/red]")
+            print("At least one tag is required.")
 
         dest_dir = SECTION_DIRS[section]
         os.makedirs(dest_dir, exist_ok=True)
         dest_path = f"{dest_dir}/{slug}.typ"
 
     # Build canonical content from local source + resolved metadata
+
     with open(src_path) as f:
         raw_body = strip_header(f.read())
     canonical = build_frontmatter(title, tags) + raw_body
@@ -126,12 +125,9 @@ def main():
         os.rename(src_path, new_local_path)
     write_file(new_local_path, canonical)
 
-    subprocess.run(["git", "add", dest_path], check=True)
-    subprocess.run(["git", "commit", "-m", f"Publish: {title}"], check=True)
-    subprocess.run(["git", "push"], check=True)
-
-    console.print(f"\n[green]Published:[/green] [bold]{dest_path}[/bold]")
-    console.print(f"[green]URL:[/green]       [bold]http://localhost:4321/{section}/{slug}/[/bold]")
+    print(f"\nPublished: {dest_path}")
+    print(f"URL:       http://localhost:4321/{section}/{slug}/")
+    print("Run 'just push' when ready to commit and push.")
 
 if __name__ == "__main__":
     main()
