@@ -31,20 +31,37 @@ def find_published(slug):
             return section, path
     return None, None
 
-def update_frontmatter(content, title, tags):
+def extract_meta(content):
+    title = (re.search(r'title:\s*"([^"]*)"', content) or type('', (), {'group': lambda s, n: None})()).group(1)
+    tags_block = re.search(r'tags:\s*\(([^)]*)\)', content)
+    tags = []
+    if tags_block:
+        tags = [t.strip().strip('"') for t in tags_block.group(1).split(",") if t.strip().strip('"')]
+    return title, tags
+
+def strip_header(content):
+    content = re.sub(r'#import[^\n]*\n', '', content)
+    content = re.sub(r'#show: main\.with\([\s\S]*?\n\)', '', content)
+    content = re.sub(r'#show: main\n?', '', content)
+    return content.lstrip('\n')
+
+def build_frontmatter(title, tags):
     tags_field = ", ".join(f'"{t}"' for t in tags)
     if len(tags) == 1:
         tags_field += ","
-    content = re.sub(r'title: "[^"]*"', f'title: "{title}"', content)
-    content = re.sub(r'date: "[^"]*"',  f'date: "{iso_timestamp()}"', content)
-    content = re.sub(r'tags: \([^)]*\)', f'tags: ({tags_field})', content)
-    return content
+    return (
+        '#import "/typ/templates/blog.typ": *\n'
+        '#show: main.with(\n'
+        f'  title: "{title}",\n'
+        f'  desc: "",\n'
+        f'  date: "{iso_timestamp()}",\n'
+        f'  tags: ({tags_field}),\n'
+        ')\n'
+    )
 
-def read_frontmatter_tags(content):
-    m = re.search(r'tags: \(([^)]*)\)', content)
-    if not m:
-        return []
-    return [t.strip().strip('"') for t in m.group(1).split(",") if t.strip().strip('"')]
+def write_file(path, content):
+    with open(path, "w", encoding="utf-8") as f:
+        f.write(content)
 
 def main():
     console.print("\n[bold underline]Publish Draft[/bold underline]\n")
@@ -66,22 +83,21 @@ def main():
             break
         console.print("[red]Invalid choice.[/red]")
 
-    slug = src_fname[:-4]
-    section, dest_path = find_published(slug)
+    local_slug = src_fname[:-4]
+    section, dest_path = find_published(local_slug)
 
     if dest_path:
-        # Already published — read existing tags/title from dest and just overwrite
-        with open(dest_path, "r", encoding="utf-8") as f:
+        # Re-publish: read metadata from existing published file
+        with open(dest_path) as f:
             existing = f.read()
-        tags = read_frontmatter_tags(existing)
-        m = re.search(r'title: "([^"]*)"', existing)
-        title = m.group(1) if m else slug.replace("-", " ").title()
+        title, tags = extract_meta(existing)
+        slug = local_slug
         console.print(f"[dim]Updating existing: {dest_path}[/dim]")
     else:
-        # First publish — prompt for everything
+        # First publish: prompt for everything
         section = Prompt.ask("[cyan]Section[/cyan]", choices=["blog", "notes"], default="blog")
 
-        raw_name = Prompt.ask("[cyan]Name[/cyan]", default=slug).strip()
+        raw_name = Prompt.ask("[cyan]Name[/cyan]", default=local_slug).strip()
         slug = raw_name.lower().replace(" ", "-")
         title = raw_name.replace("-", " ").title()
 
@@ -96,14 +112,19 @@ def main():
         os.makedirs(dest_dir, exist_ok=True)
         dest_path = f"{dest_dir}/{slug}.typ"
 
-    with open(src_path, "r", encoding="utf-8") as f:
-        content = f.read()
+    # Build canonical content from local source + resolved metadata
+    with open(src_path) as f:
+        raw_body = strip_header(f.read())
+    canonical = build_frontmatter(title, tags) + raw_body
 
-    content = update_frontmatter(content, title, tags)
-    shutil.copy2(src_path, dest_path)
+    # Write to published destination
+    write_file(dest_path, canonical)
 
-    with open(dest_path, "w", encoding="utf-8") as f:
-        f.write(content)
+    # Sync local draft: rename if slug changed, then write canonical content back
+    new_local_path = f"{LOCAL_DIR}/{slug}.typ"
+    if new_local_path != src_path:
+        os.rename(src_path, new_local_path)
+    write_file(new_local_path, canonical)
 
     subprocess.run(["git", "add", dest_path], check=True)
     subprocess.run(["git", "commit", "-m", f"Publish: {title}"], check=True)
