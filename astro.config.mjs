@@ -90,12 +90,14 @@ export default defineConfig({
             const match = req.url?.match(/^\/(blog|notes|local)\/([^/?@]+)\//);
             if (!match) return next();
             const [, urlPrefix, slug] = match;
-            if (typstWatchers.has(slug)) return next();
-            const typDirMap = { blog: "content/blog", notes: "content/notes", local: "local/article" };
+            const watchKey = `${urlPrefix}/${slug}`;
+            if (typstWatchers.has(watchKey)) return next();
+            const typDirMap = /** @type {Record<string,string>} */({ blog: "content/blog", notes: "content/notes", local: "local/article" });
             const typFile = `${typDirMap[urlPrefix]}/${slug}.typ`;
             if (fs.existsSync(typFile)) {
               fs.mkdirSync(`html/${urlPrefix}/${slug}`, { recursive: true });
-              console.log(`[typst] starting watch for ${urlPrefix}/${slug}`);
+              server.watcher.add(`./html/${urlPrefix}/${slug}/index.html`);
+              console.log(`[typst] starting watch for ${watchKey}`);
               const proc = spawn(
                 "typst",
                 ["watch", typFile, `html/${urlPrefix}/${slug}/index.html`,
@@ -103,10 +105,10 @@ export default defineConfig({
                 { stdio: "inherit" }
               );
               proc.on("exit", (code) => {
-                console.log(`[typst] watch for ${slug} exited with code ${code}`);
-                typstWatchers.delete(slug);
+                console.log(`[typst] watch for ${watchKey} exited with code ${code}`);
+                typstWatchers.delete(watchKey);
               });
-              typstWatchers.set(slug, proc);
+              typstWatchers.set(watchKey, proc);
             }
             next();
           });
