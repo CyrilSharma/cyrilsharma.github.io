@@ -55,14 +55,16 @@ const currentPostId = filteredPosts.find((p) => {
   return urlPath === href || urlPath === href.replace(/\/$/, "");
 })?.id;
 
-const currentPost = currentPostId ? filteredPosts.find(p => p.id === currentPostId) : undefined;
-const commandItems: PaletteItem[] = currentPost
-  ? [{
-      label: "View Raw",
-      href: `${BASE_PATH}/${SECTION_URL[currentPost.data.section] ?? currentPost.data.section}/${currentPost.data.slug}/raw.txt`,
-      group: "command",
-    }]
-  : [];
+const rssUrl = new URL(`${BASE_PATH}/rss.xml`, Astro.site).href;
+
+const commandItems: PaletteItem[] = [
+  { label: "Copy RSS URL", href: `clipboard:${rssUrl}`, group: "command" },
+  ...(currentPostId ? filteredPosts.filter(p => p.id === currentPostId).map(p => ({
+    label: "View Raw",
+    href: `${BASE_PATH}/${SECTION_URL[p.data.section] ?? p.data.section}/${p.data.slug}/raw.txt`,
+    group: "command" as const,
+  })) : []),
+];
 
 const items: PaletteItem[] = [...pageItems, ...postItems, ...headingItems, ...commandItems];
 ---
@@ -74,6 +76,13 @@ const items: PaletteItem[] = [...pageItems, ...postItems, ...headingItems, ...co
   };
   setHeaderHeight();
   window.addEventListener("resize", setHeaderHeight);
+
+  document.getElementById("rss-btn")?.addEventListener("click", (e) => {
+    const btn = e.currentTarget as HTMLButtonElement;
+    navigator.clipboard.writeText(btn.dataset.url ?? "");
+    btn.dataset.copied = "";
+    btn.addEventListener("animationend", () => delete btn.dataset.copied, { once: true });
+  });
 </script>
 
 <header>
@@ -81,6 +90,16 @@ const items: PaletteItem[] = [...pageItems, ...postItems, ...headingItems, ...co
     <a href={`${BASE_PATH}/blog`} class={isActive("blog") ? "active" : ""}>Blog</a>
     <a href={`${BASE_PATH}/notes`} class={isActive("notes") ? "active" : ""}>Notes</a>
     {dev && <a href={`${BASE_PATH}/local`} class={isActive("local") ? "active" : ""}>Local</a>}
+    <button id="rss-btn" class="cp-trigger" data-url={rssUrl} aria-label="Copy RSS URL" title="Copy RSS URL">
+      <svg class="rss-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M4 11a9 9 0 0 1 9 9" />
+        <path d="M4 4a16 16 0 0 1 16 16" />
+        <circle cx="5" cy="19" r="1.5" fill="currentColor" stroke="none" />
+      </svg>
+      <svg class="check-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <polyline points="20 6 9 17 4 12" />
+      </svg>
+    </button>
     <CommandPalette items={items} currentPostId={currentPostId} client:load />
   </nav>
   <hr />
@@ -121,6 +140,13 @@ const items: PaletteItem[] = [...pageItems, ...postItems, ...headingItems, ...co
     opacity: 0.15;
     margin: 0;
   }
+
+  @keyframes rss-copied { to { opacity: 0.45; } }
+  #rss-btn .rss-icon { display: block; }
+  #rss-btn .check-icon { display: none; }
+  #rss-btn[data-copied] { animation: rss-copied 1.5s forwards; color: var(--gold); opacity: 1; }
+  #rss-btn[data-copied] .rss-icon { display: none; }
+  #rss-btn[data-copied] .check-icon { display: block; }
 </style>
 
 <style is:global>

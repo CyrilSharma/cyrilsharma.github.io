@@ -76,6 +76,15 @@ export default function CommandPalette({
 
   const navigate = useCallback((href: string) => {
     hide();
+    if (href.startsWith("clipboard:")) {
+      navigator.clipboard.writeText(href.slice("clipboard:".length));
+      const btn = document.getElementById("rss-btn") as HTMLButtonElement | null;
+      if (btn) {
+        btn.dataset.copied = "";
+        btn.addEventListener("animationend", () => delete btn.dataset.copied, { once: true });
+      }
+      return;
+    }
     if (href.startsWith("#")) {
       const el = document.getElementById(href.slice(1));
       if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
