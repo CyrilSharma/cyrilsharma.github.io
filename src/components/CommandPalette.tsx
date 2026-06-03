@@ -44,9 +44,10 @@ export default function CommandPalette({
       if (e.key === "Escape") { hide(); return; }
       const tag = (e.target as HTMLElement).tagName;
       if (tag === "INPUT" || tag === "TEXTAREA") return;
-      if (e.key === "/" && !e.ctrlKey && !e.metaKey && !e.altKey) {
+      if ((e.key === "/" || e.key === "#" || e.key === ">") && !e.ctrlKey && !e.metaKey && !e.altKey) {
         e.preventDefault();
-        show();
+        setQuery(e.key === "/" ? "" : e.key);
+        setOpen(true);
       }
     };
     document.addEventListener("keydown", down);
