@@ -83,7 +83,7 @@ $ argmin_c  EE_(t~pi) ((J(t) - c) nabla log(p(t))))^2 - (EE_(t~pi) (J(t) - c) na
   => c = (EE_(t~pi) J(t) (nabla log(p(t))^2))/(EE_(t~pi)(nabla log(p(t))^2))
 $
 
-This quantity is a bit complicated. Usually you'll make some simplifying assumptions. For example, you might say the gradients are roughly constant, so the best choice of $c$ is $EE_(t~pi) J(t)$. This approach is called GRPO and has seen widespread usage in LLM training.
+This quantity is a bit complicated. Usually you'll make some simplifying assumptions. For example, you might say the $(nabla log(p(t)))^2$ is roughly independent of $J(t)$, so the best choice of $c$ is $EE_(t~pi) J(t)$. This choice of baseline has been popularized by GRPO and has seen widespread usage in LLM training.
 
 == Approximate Policy Iteration
 Another reasonable objective is to relax the argmax-based improvement step. Specifically,
