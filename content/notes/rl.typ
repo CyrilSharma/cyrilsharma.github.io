@@ -66,14 +66,16 @@ $
 
 We used the fact that $J'(t) = 0$ as the reward of a trajectory does not depend on the policy that generated it and everyone's favorite $nabla p(t) = nabla (log(p(t))) p(t)$ trick to turn things into an expectation, which can be efficiently estimated through monte-carlo methods.
 
-Now, a cool extension of this is you can actually subtract any value from $J(t)$ (so long as the value is independent of the policy) and it won't change the expectation. Why?
+Now, a cool extension of this is you can actually subtract any value from $J(t)$ (so long as the value is independent of the trajectory) and it won't change the expectation. Why?
 $
   EE_(t~pi) (J(t) - c) nabla log(p(t)) = EE_(t~pi) J(t) nabla log(p(t)) - c nabla log(p(t)) \
   EE_(t~pi) c nabla log(p(t)) = c integral p(t) nabla log(p(t)) = \
   c integral nabla p(t) = c nabla integral p(t) = c nabla (1) = 0
 $
 
-That's pretty neat, but what's the point? Well, monte-carlo returns can be quite noisy. If we can subtract a good _baseline_, we can reduce the variance of the monte-carlo estimator and get a cleaner gradient.
+That's pretty neat, but what's the point? Well, monte-carlo returns can be quite noisy. If we can subtract a good _baseline_, we can reduce the variance of the monte-carlo estimator and get a cleaner gradient. Why? Just imagine estimating $EE[X]$ where $X = c + Z + N(0, 1/9)$ and $Z ~ N(0, 1)$. Clearly, if we had access to $Z$ we could derive a much better estimator for $X$, because _$X$ and $Z$ are correlated_; knowing $Z$ gives us information about the noise in $X$ which we can exploit. This is a general trick you can do anytime you have correlated auxillary variables. 
+
+Now let's see this trick in action.
 
 $ argmin_c  EE_(t~pi) ((J(t) - c) nabla log(p(t))))^2 - (EE_(t~pi) (J(t) - c) nabla log(p(t)))^2 =\
   argmin_c EE_(t~pi) ((J(t) - c) nabla log(p(t))))^2 - (EE_(t~pi) J(t) nabla log(p(t)))^2 = \
@@ -83,7 +85,18 @@ $ argmin_c  EE_(t~pi) ((J(t) - c) nabla log(p(t))))^2 - (EE_(t~pi) (J(t) - c) na
   => c = (EE_(t~pi) J(t) (nabla log(p(t))^2))/(EE_(t~pi)(nabla log(p(t))^2))
 $
 
-This quantity is a bit complicated. Usually you'll make some simplifying assumptions. For example, you might say the $(nabla log(p(t)))^2$ is roughly independent of $J(t)$, so the best choice of $c$ is $EE_(t~pi) J(t)$. This choice of baseline has been popularized by GRPO and has seen widespread usage in LLM training.
+This quantity is a bit complicated. A standard simplifying assumption is to assume $(nabla log(p(t)))^2$ is independent of $J(t)$. This yields the best choice of $c$ as $EE_(t~pi) J(t)$. Let's look at what kind of variance reduction this gives us...
+
+$
+  "Variance" =  EE_(t~pi) ((J(t) - EE(J(t))) nabla log(p(t))))^2 - (EE_(t~pi) J(t) nabla log(p(t)))^2 =\
+  =>_"independence" E((J(t) - E(J(t)))^2 F - (EE_(t~pi) J(t) nabla log(p(t)))^2 
+$
+
+Where $F$ is $EE((nabla log(p(t)))^2)$. Without the baseline, you can see the variance would depend on the square of the return instead of square of the _deviation_ of the return. Thus, this trick can eliminate quite a bit of noise! This is why keeping advantages mean 0, controlling your reward scale, and having an accurate $E(J(t))$ estimator (network-based or rollout-based) is crucial to stability in many algorithms. It's worth noting that the independence assumption is _not true_ it just makes for an easier time computing a baseline, there are some papers which try to use the true optimal baseline like #link("https://arxiv.org/abs/2505.23585")[OPO].
+
+GRPO is the poster-child for this type of policy gradient and it estimate the baseline using a simple average over rollouts.
+
+
 
 == Approximate Policy Iteration
 Another reasonable objective is to relax the argmax-based improvement step. Specifically,
@@ -102,7 +115,7 @@ $
   EE_(a ~ pi_"old" (s_t)) pi(s_t, a)/(pi_"old" (s_t, a)) A_(pi_"old")(s_t, a)
 $
 
-The reason this is useful is we can estimate this expectation with rollouts we have collected. Do notice that it's quite possible for many states to have only received a single action label, making our expectation estimate essentially Monte-Carlo estimates with a single sample. This leads to a potentially high-variance gradient estimator, which means it's often necessary to ensure the policy post-gradient steps isn't too different then the policy before. TRPO solves this with a KL-penalty, PPO solves this by clipping the importance sampling ratio to be within $(1 - epsilon, 1 + epsilon)$.
+The reason this is useful is we can estimate this expectation with rollouts we have collected. Do notice that it's quite possible for many states to have only received a single action label, making our expectation estimate essentially Monte-Carlo estimates with a single sample. This leads to a potentially high-variance gradient estimator, which means it's often necessary to constrain the gradient steps to not change the policy much. TRPO solves this with a KL-penalty, PPO and GRPO solve this by clipping the importance sampling ratio to be within $(1 - epsilon, 1 + epsilon)$.
 
 // = Appendix
 // + In practice, you'll see a bunch of $gamma$s floating around, that's because some games don't have bounded time horizons or perhaps just really long time horizons, and you want to bias the model towards maximizing rewards over shorter time horizons. This doesn't really change the substance of the algorithms.
