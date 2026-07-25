@@ -6,6 +6,52 @@
   tags: ("ml",),
 )
 
+== Architecture
+The architecture of a prototypical LLM is actually remarkably simple.
+
+#import "@preview/fletcher:0.5.8" as fletcher: diagram, node, edge
+
+*Layer*
+#graphic(align(center, diagram(
+  spacing: (8mm, 11mm),
+  node-stroke: 0.55pt,
+  node-corner-radius: 2pt,
+  node-shape: rect,
+
+
+  node((1,0), align(center)[Hidden]),
+  node((2,0), align(center)[Attention]),
+  node((3,0), align(center)[Add \& Norm]),
+  node((4,0), align(center)[FFN]),
+  node((5,0), align(center)[Add \& Norm]),
+  node((6,0), align(center)[Hidden]),
+
+  edge((1,0), (2,0), "-|>"),
+  edge((2,0), (3,0), "-|>"),
+  edge((3,0), (4,0), "-|>"),
+  edge((4,0), (5,0), "-|>"),
+  edge((5,0), (6,0), "-|>"),
+
+  edge((1.5,0), (1.5,-0.55), (3,-0.55), (3,0), "-|>", dash: "dashed"),
+  edge((3.65,0), (3.65,-0.55), (5,-0.55), (5,0), "-|>", dash: "dashed"),
+)))
+
+*Network*
+#graphic(align(center, diagram(
+  spacing: (8mm, 11mm),
+  node-stroke: 0.55pt,
+  node-corner-radius: 2pt,
+  node-shape: rect,
+
+  node((1,0), align(center)[Embed]),
+  node((2,0), align(center)[Layer $times "nlayers"$]),
+  node((3,0), align(center)[Unembed]),
+  node((4,0), align(center)[Softmax]),
+
+  edge((1,0), (2,0), "-|>"),
+  edge((2,0), (3,0), "-|>"),
+  edge((3,0), (4,0), "-|>"),
+)))
 
 == Attention
 Let $X$ be a sequence of length $T$. Attention is defined as follows.
@@ -120,6 +166,59 @@ $
 $
 
 Incrementally merge chunks using FlashAttention and boom! You've successfully reduced the memory required per GPU.
+
+== Residual Stream
+There's actually a very important decision lurking in how you hook up the residual stream.
+
+Should your model look like this?
+#graphic(align(center, diagram(
+  spacing: (8mm, 11mm),
+  node-stroke: 0.55pt,
+  node-corner-radius: 2pt,
+  node-shape: rect,
+
+
+  node((1,0), align(center)[Hidden]),
+  node((2,0), align(center)[Attention]),
+  node((3,0), align(center)[Add \& Norm]),
+  node((4,0), align(center)[FFN]),
+  node((5,0), align(center)[Add \& Norm]),
+  node((6,0), align(center)[Hidden]),
+
+  edge((1,0), (2,0), "-|>"),
+  edge((2,0), (3,0), "-|>"),
+  edge((3,0), (4,0), "-|>"),
+  edge((4,0), (5,0), "-|>"),
+  edge((5,0), (6,0), "-|>"),
+
+  edge((1.5,0), (1.5,-0.55), (3,-0.55), (3,0), "-|>", dash: "dashed"),
+  edge((3.65,0), (3.65,-0.55), (5,-0.55), (5,0), "-|>", dash: "dashed"),
+)))
+
+Or this?
+#graphic(align(center, diagram(
+  spacing: (8mm, 11mm),
+  node-stroke: 0.55pt,
+  node-corner-radius: 2pt,
+  node-shape: rect,
+
+
+  node((1,0), align(center)[Hidden]),
+  node((2,0), align(center)[Attention]),
+  node((3,0), align(center)[Add \& Norm]),
+  node((4,0), align(center)[FFN]),
+  node((5,0), align(center)[Add \& Norm]),
+  node((6,0), align(center)[Hidden]),
+
+  edge((1,0), (2,0), "-|>"),
+  edge((2,0), (3,0), "-|>"),
+  edge((3,0), (4,0), "-|>"),
+  edge((4,0), (5,0), "-|>"),
+  edge((5,0), (6,0), "-|>"),
+
+  edge((1.5,0), (1.5,-0.55), (3,-0.55), (3,0), "-|>", dash: "dashed"),
+  edge((3.65,0), (3.65,-0.55), (5,-0.55), (5,0), "-|>", dash: "dashed"),
+)))
 
 == Scaling
 When you start making models bigger, you quickly start running into a lot of performance bottlenecks. Your main avenue for addressing them is to somehow share the load across more and more GPUs which motivates a lot of interesting parallelism strategies. All of these strategies have _limits_ for any given model, so you'll often end up using more then one of them. Libraries like Megatron handle choosing the optimal combination of these strategies for you.
