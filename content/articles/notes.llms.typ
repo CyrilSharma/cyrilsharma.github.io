@@ -6,35 +6,52 @@
   tags: ("ml",),
 )
 
+
+#import "@preview/fletcher:0.5.8" as fletcher: diagram, node, edge
+#let rise = 0.55
+#let tap(anchor, name) = node(
+  (rel: (-0.5, 0), to: anchor), "",
+  name: name, shape: circle, radius: 1.1pt, fill: black, stroke: none,
+)
+
+#let skip(from, to) = edge(
+  from,
+  (rel: (0, -rise), to: from),
+  (rel: (0, -rise), to: to),
+  to, "-|>", dash: "dashed",
+  layer: -1
+)
+
 == Architecture
 The architecture of a prototypical LLM is actually remarkably simple.
 
-#import "@preview/fletcher:0.5.8" as fletcher: diagram, node, edge
 
 *Layer*
-#graphic(align(center, diagram(
+#let idiomatic_arch = graphic(align(center, diagram(
   spacing: (8mm, 11mm),
+  node-fill: white,
   node-stroke: 0.55pt,
   node-corner-radius: 2pt,
   node-shape: rect,
+  edge-corner-radius: 3pt,
+  edge-stroke: 0.55pt,
+  mark-scale: 70%,
 
+  node((0,0),        [Hidden],    name: <in>),    edge("-|>"),
+  node((rel: (1,0)), [Attention], name: <attn>),  edge("-|>"),
+  node((rel: (1,0)), [Add],       name: <add1>),  edge("-|>"),
+  node((rel: (1,0)), [Norm],      name: <norm1>), edge("-|>"),
+  node((rel: (1,0)), [FFN],       name: <ffn>),   edge("-|>"),
+  node((rel: (1,0)), [Add],       name: <add2>), edge("-|>"),
+  node((rel: (1,0)), [Norm],      name: <norm2>), edge("-|>"),
+  node((rel: (1,0)), [Hidden],    name: <out>),
 
-  node((1,0), align(center)[Hidden]),
-  node((2,0), align(center)[Attention]),
-  node((3,0), align(center)[Add \& Norm]),
-  node((4,0), align(center)[FFN]),
-  node((5,0), align(center)[Add \& Norm]),
-  node((6,0), align(center)[Hidden]),
-
-  edge((1,0), (2,0), "-|>"),
-  edge((2,0), (3,0), "-|>"),
-  edge((3,0), (4,0), "-|>"),
-  edge((4,0), (5,0), "-|>"),
-  edge((5,0), (6,0), "-|>"),
-
-  edge((1.5,0), (1.5,-0.55), (3,-0.55), (3,0), "-|>", dash: "dashed"),
-  edge((3.65,0), (3.65,-0.55), (5,-0.55), (5,0), "-|>", dash: "dashed"),
+  tap(<attn>, <tap1>),
+  tap(<ffn>,  <tap2>),
+  skip(<tap1>, <add1>),
+  skip(<tap2>, <add2>),
 )))
+#idiomatic_arch
 
 *Network*
 #graphic(align(center, diagram(
@@ -52,6 +69,8 @@ The architecture of a prototypical LLM is actually remarkably simple.
   edge((2,0), (3,0), "-|>"),
   edge((3,0), (4,0), "-|>"),
 )))
+
+Attention mixes across _time_, FFNs mix across _token dimensions_.
 
 == Attention
 Let $X$ be a sequence of length $T$. Attention is defined as follows.
@@ -171,53 +190,91 @@ Incrementally merge chunks using FlashAttention and boom! You've successfully re
 There's actually a very important decision lurking in how you hook up the residual stream.
 
 Should your model look like this?
-#graphic(align(center, diagram(
-  spacing: (8mm, 11mm),
-  node-stroke: 0.55pt,
-  node-corner-radius: 2pt,
-  node-shape: rect,
-
-
-  node((1,0), align(center)[Hidden]),
-  node((2,0), align(center)[Attention]),
-  node((3,0), align(center)[Add \& Norm]),
-  node((4,0), align(center)[FFN]),
-  node((5,0), align(center)[Add \& Norm]),
-  node((6,0), align(center)[Hidden]),
-
-  edge((1,0), (2,0), "-|>"),
-  edge((2,0), (3,0), "-|>"),
-  edge((3,0), (4,0), "-|>"),
-  edge((4,0), (5,0), "-|>"),
-  edge((5,0), (6,0), "-|>"),
-
-  edge((1.5,0), (1.5,-0.55), (3,-0.55), (3,0), "-|>", dash: "dashed"),
-  edge((3.65,0), (3.65,-0.55), (5,-0.55), (5,0), "-|>", dash: "dashed"),
-)))
+#idiomatic_arch
 
 Or this?
 #graphic(align(center, diagram(
   spacing: (8mm, 11mm),
+  node-fill: white,
   node-stroke: 0.55pt,
   node-corner-radius: 2pt,
   node-shape: rect,
+  edge-corner-radius: 3pt,
+  edge-stroke: 0.55pt,
+  mark-scale: 70%,
 
+  node((0,0),        [Hidden],    name: <in>),   edge("-|>"),
+  node((rel: (1,0)), [Norm],      name: <norm1>), edge("-|>"),
+  node((rel: (1,0)), [Attention], name: <attn>), edge("-|>"),
+  node((rel: (1,0)), [Add],       name: <add1>), edge("-|>"),
+  node((rel: (1,0)), [Norm],      name: <norm2>), edge("-|>"),
+  node((rel: (1,0)), [FFN],       name: <ffn>),  edge("-|>"),
+  node((rel: (1,0)), [Add],       name: <add2>), edge("-|>"),
+  node((rel: (1,0)), [Hidden],    name: <out>),
 
-  node((1,0), align(center)[Hidden]),
-  node((2,0), align(center)[Attention]),
-  node((3,0), align(center)[Add \& Norm]),
-  node((4,0), align(center)[FFN]),
-  node((5,0), align(center)[Add \& Norm]),
-  node((6,0), align(center)[Hidden]),
+  tap(<norm1>, <tap1>),
+  tap(<norm2>,  <tap2>),
+  skip(<tap1>, <add1>),
+  skip(<tap2>, <add2>),
+)))
 
-  edge((1,0), (2,0), "-|>"),
-  edge((2,0), (3,0), "-|>"),
-  edge((3,0), (4,0), "-|>"),
-  edge((4,0), (5,0), "-|>"),
-  edge((5,0), (6,0), "-|>"),
+Consider the second setup (*Pre-Layer Norm*). The outputs of the FFN are directly added to the residual stream. Thus, over the course of many layers, the residual stream will typically grow larger (e.g. this is similar to a random walk setup where you repeatedly add the same increment). This isn't _explosive_ growth (it's linear or sublinear depending on how correlated you think the increments are). What do the gradients look like?
 
-  edge((1.5,0), (1.5,-0.55), (3,-0.55), (3,0), "-|>", dash: "dashed"),
-  edge((3.65,0), (3.65,-0.55), (5,-0.55), (5,0), "-|>", dash: "dashed"),
+$
+  dx_(t+1)/dx_t = I + (dif "FFN"("LN"(x_t)))/(dif "LN"(x_t)) (dif L N(x_t))/(d x_t)
+$
+
+Now, observe that since $norm(x)$ growing linearly, the layernorm has to scale _down_ by more and more the deeper you go. Hence, as you get really deep into the network the second term vanishes and your block degenerates to something near an identity mapping. This makes it hard to make good use of layers deep in a *Pre-Layer Norm* LLM.
+
+//  but it means the gradients near the end of the LLM are much larger than those near the start. This can make the effective usage of later layers tricky, as their gradients are too large to converge to good solutions. This is also supposedly the reason *Pre-Layer Norm* LLMs often need a small warmup learning rate, to maintain reasonable sized gradients until the model has entered a "more-stable" optimization landscape.
+
+What about the first setup (*Post-Layer Norm*)? Let's look at the gradient.
+$
+  dx_(t+1)/dx_t = (dif "LN"("FFN"(x_t) + x_t))/(dif "FFN"(x_t)) (dif "FFN"(x_t))/(d x_t) + (dif "LN"("FFN"(x_t) + x_t))/(dif x_t) = \
+    (I + (dif "FFN"(x_t))/(d x_t) )((dif "LN"("FFN"(x_t) + x_t))/(dif "FFN"(x_t)))
+$
+
+Suppose $"FFN"(x_t)$ has the effect of _amplifying_ the input. The above equation tells us the closer you get to the first layer, the more the gradient will get amplified. This leads to potentially huge gradient spikes, especially at the beginning of training. This is why having a small _warmup_ rate is essentially for this type of architecture, as it keeps the gradients small until you get to a stable optimization region. Still, this isn't enough to completely eliminate the instability, and so despite the growing hidden state activations, *Pre-Layer Norm* is often preferred.
+
+As you can see, neither *Pre* nor *Post* Layernorm is completely satisfactory, and this has motivated a bunch of interesting approaches like adding some kind of depth-based learning rate scaling. My personal favorite fix is what Kimi Residuals did. Instead of _adding_ the outputs of your module to the residual stream and then norming, you use Attention (without Value Projection) over the outputs of your modules and plug THAT into the norm. As mentioned before, you can think of attention as a carefully chosen mixer matrix applied to its values. Without a Value projection we thus have...
+$
+  O = (W_"Attention" W_V) X => O = W_"Attention" X
+$
+
+$W_"Attention"$ computes a convex combination over $X$, so the input to the norm stays roughly the same magnitude throughout all layers, preventing output _and_ gradient norms from growing.
+
+#graphic(align(center, diagram(
+  spacing: (8mm, 11mm),
+  node-fill: white,
+  node-stroke: 0.55pt,
+  node-corner-radius: 2pt,
+  node-shape: rect,
+  edge-corner-radius: 3pt,
+  edge-stroke: 0.55pt,
+  mark-scale: 70%,
+
+  node((0,-0.5),      [Past Hidden States],    name: <stream>),
+  node((0,0),        [Norm],    name: <norm1>),    edge("-|>"),
+  node((rel: (1,0)), [Attention], name: <attn>),  edge("-|>"),
+  node((rel: (1,0)), [ResidualAttn],      name: <r1>), edge("-|>"),
+  node((rel: (1,0)), [Norm], name: <norm2>),  edge("-|>"),
+  node((rel: (1,0)), [FFN],       name: <ffn>),   edge("-|>"),
+  node((rel: (1,0)), [ResidualAttn],      name: <r2>), edge("-|>"),
+  node((rel: (1,0)), [Hidden],    name: <out>),
+
+  skip(<attn>, <r2>),
+  edge(
+    <stream>,
+    (rel: (0, -.5), to: <r1>),
+    <r1>, "-|>", dash: "dashed",
+    layer: -1
+  ),
+  edge(
+    <stream>,
+    (rel: (0, -.5), to: <r2>),
+    <r2>, "-|>", dash: "dashed",
+    layer: -1
+  ),
 )))
 
 == Scaling
