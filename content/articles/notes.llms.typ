@@ -234,11 +234,11 @@ $
     ((dif "LN"("FFN"(x_t) + x_t))/(dif "FFN"(x_t)))(I + (dif "FFN"(x_t))/(d x_t) )
 $
 
-Suppose $"FFN"(x_t)$ has the effect of _amplifying_ the input. The above equation tells us the closer you get to the first layer, the more the gradient will get amplified. This leads to potentially huge gradient spikes, especially at the beginning of training. This is why having a small _warmup_ rate is essentially for this type of architecture, as it keeps the gradients small until you get to a stable optimization region. Still, this isn't enough to completely eliminate the instability, and so despite the growing hidden state activations, *Pre-Layer Norm* is often preferred.
+This recurrence has a compounding effect. Notice this is a bit different then the previous recurrence, as that one approached 1 as you got deeper in the network, this recurrence has no such property. Thus, it's very easy for gradients to get too large or too small (gradient spikes and/or near-zero gradients), especially the closer we get to the first layer. This is why having a small _warmup_ rate is essentially for this type of architecture, as it keeps the gradients small until you get to a stable optimization region. Still, this isn't enough to completely eliminate the instability, and so despite the growing hidden state activations, *Pre-Layer Norm* is often preferred.
 
 As you can see, neither *Pre* nor *Post* Layernorm is completely satisfactory, and this has motivated a bunch of interesting approaches. One option is to try fixing the problems of *Pre*-norm by intelligently doing some kind of depth-based learning rate scaling. Alternatively you could try to fix the problems of *Pre*-norm and prevent the compounding gradient problem. This is what Attention Residuals by MoonshotAI did. Instead of _adding_ the outputs of your module to the residual stream and then norming, you use Attention (without Value Projection) over the outputs of your modules and plug THAT into the norm. As mentioned before, you can think of attention as a carefully chosen mixer matrix applied to its values. Without a Value projection we thus have...
 $
-  O = (W_"Attention" W_V) X => O = W_"Attention" X
+  O = W_"Attention" X W_V => O = W_"Attention" X
 $
 
 $W_"Attention"$ computes a convex combination over $X$, so the input to the norm stays roughly the same magnitude throughout all layers, preventing output _and_ gradient norms from growing.
@@ -259,7 +259,6 @@ $W_"Attention"$ computes a convex combination over $X$, so the input to the norm
   node((rel: (1,0)), [Norm], name: <norm2>),  edge("-|>"),
   node((rel: (1,0)), [FFN],       name: <ffn>),   edge("-|>"),
   node((rel: (1,0)), [ResidualAttn],      name: <r2>), edge("-|>"),
-  node((rel: (1,0)), [Hidden],    name: <out>), edge("-|>"),
   node((rel: (1,0)), [Norm],    name: <norm1>),
 
   skip(<attn>, <r2>),
