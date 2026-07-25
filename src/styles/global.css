@@ -236,6 +236,16 @@ img {
   height: auto;
   border-radius: 8px;
 }
+
+.prose .align[style*="text-align: center"] > :is(img, svg, .typst-frame) {
+  display: block;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.prose svg {
+  max-width: 100%;
+}
 pre,
 code,
 kbd,
