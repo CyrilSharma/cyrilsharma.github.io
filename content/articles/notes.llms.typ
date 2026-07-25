@@ -27,7 +27,7 @@ The architecture of a prototypical LLM is actually remarkably simple.
 
 
 *Layer*
-#let idiomatic_arch = graphic(align(center, diagram(
+#let idiomatic_arch = align(center, graphic(diagram(
   spacing: (8mm, 11mm),
   node-fill: white,
   node-stroke: 0.55pt,
@@ -54,7 +54,7 @@ The architecture of a prototypical LLM is actually remarkably simple.
 #idiomatic_arch
 
 *Network*
-#graphic(align(center, diagram(
+#align(center, graphic(diagram(
   spacing: (8mm, 11mm),
   node-stroke: 0.55pt,
   node-corner-radius: 2pt,
