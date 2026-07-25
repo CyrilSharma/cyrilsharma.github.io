@@ -8,3 +8,6 @@ publish:
 
 push:
   uv run ./scripts/push.py
+
+deploy:
+  uv run ./scripts/deploy.py
