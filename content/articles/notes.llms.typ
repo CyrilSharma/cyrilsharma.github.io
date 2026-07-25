@@ -75,13 +75,13 @@ Attention mixes across _time_, FFNs mix across _token dimensions_.
 == Attention
 Let $X$ be a sequence of length $T$. Attention is defined as follows.
 $
-  Q = "RoPE"(W_Q X) quad K = "RoPE"(W_K X) quad V = W_V X \
+  Q = "RoPE"(X W_Q) quad K = "RoPE"(X W_K) quad V = X W_V \
   O = "softmax"_"rowwise" ("mask"(Q K^top)/"normalization") V
 $
 
-You can think of this as just a clever linearly mixing $X$ across its time dimension.
+You can think of this as a clever linearly mixing $X$ across its time dimension, plus a projection.
 $
-  O = (W_"attention" W_"V") X
+  O = W_"attention" X W_"V"
 $
 
 A lot can be said about the biases and weaknesses of this operator but I won't go into that here.
@@ -231,19 +231,19 @@ Now, observe that since $norm(x)$ growing linearly, the layernorm has to scale _
 What about the first setup (*Post-Layer Norm*)? Let's look at the gradient.
 $
   dx_(t+1)/dx_t = (dif "LN"("FFN"(x_t) + x_t))/(dif "FFN"(x_t)) (dif "FFN"(x_t))/(d x_t) + (dif "LN"("FFN"(x_t) + x_t))/(dif x_t) = \
-    (I + (dif "FFN"(x_t))/(d x_t) )((dif "LN"("FFN"(x_t) + x_t))/(dif "FFN"(x_t)))
+    ((dif "LN"("FFN"(x_t) + x_t))/(dif "FFN"(x_t)))(I + (dif "FFN"(x_t))/(d x_t) )
 $
 
 Suppose $"FFN"(x_t)$ has the effect of _amplifying_ the input. The above equation tells us the closer you get to the first layer, the more the gradient will get amplified. This leads to potentially huge gradient spikes, especially at the beginning of training. This is why having a small _warmup_ rate is essentially for this type of architecture, as it keeps the gradients small until you get to a stable optimization region. Still, this isn't enough to completely eliminate the instability, and so despite the growing hidden state activations, *Pre-Layer Norm* is often preferred.
 
-As you can see, neither *Pre* nor *Post* Layernorm is completely satisfactory, and this has motivated a bunch of interesting approaches like adding some kind of depth-based learning rate scaling. My personal favorite fix is what Kimi Residuals did. Instead of _adding_ the outputs of your module to the residual stream and then norming, you use Attention (without Value Projection) over the outputs of your modules and plug THAT into the norm. As mentioned before, you can think of attention as a carefully chosen mixer matrix applied to its values. Without a Value projection we thus have...
+As you can see, neither *Pre* nor *Post* Layernorm is completely satisfactory, and this has motivated a bunch of interesting approaches. One option is to try fixing the problems of *Pre*-norm by intelligently doing some kind of depth-based learning rate scaling. Alternatively you could try to fix the problems of *Pre*-norm and prevent the compounding gradient problem. This is what Attention Residuals by MoonshotAI did. Instead of _adding_ the outputs of your module to the residual stream and then norming, you use Attention (without Value Projection) over the outputs of your modules and plug THAT into the norm. As mentioned before, you can think of attention as a carefully chosen mixer matrix applied to its values. Without a Value projection we thus have...
 $
   O = (W_"Attention" W_V) X => O = W_"Attention" X
 $
 
 $W_"Attention"$ computes a convex combination over $X$, so the input to the norm stays roughly the same magnitude throughout all layers, preventing output _and_ gradient norms from growing.
 
-#graphic(align(center, diagram(
+#align(center, graphic(diagram(
   spacing: (8mm, 11mm),
   node-fill: white,
   node-stroke: 0.55pt,
@@ -253,14 +253,14 @@ $W_"Attention"$ computes a convex combination over $X$, so the input to the norm
   edge-stroke: 0.55pt,
   mark-scale: 70%,
 
-  node((0,-0.5),      [Past Hidden States],    name: <stream>),
-  node((0,0),        [Norm],    name: <norm1>),    edge("-|>"),
-  node((rel: (1,0)), [Attention], name: <attn>),  edge("-|>"),
+  node((0,-0.5),      [Past Hidden States],    name: <stream>),  edge("-|>"),
+  node((0,0), [Attention], name: <attn>),  edge("-|>"),
   node((rel: (1,0)), [ResidualAttn],      name: <r1>), edge("-|>"),
   node((rel: (1,0)), [Norm], name: <norm2>),  edge("-|>"),
   node((rel: (1,0)), [FFN],       name: <ffn>),   edge("-|>"),
   node((rel: (1,0)), [ResidualAttn],      name: <r2>), edge("-|>"),
-  node((rel: (1,0)), [Hidden],    name: <out>),
+  node((rel: (1,0)), [Hidden],    name: <out>), edge("-|>"),
+  node((rel: (1,0)), [Norm],    name: <norm1>),
 
   skip(<attn>, <r2>),
   edge(
