@@ -64,7 +64,6 @@ export function extractHeadings(
 export const SECTION_URL: Record<string, string> = {
   blog: "blog",
   notes: "notes",
-  local: "local",
 };
 
 export async function getPostStaticPaths(section: string) {

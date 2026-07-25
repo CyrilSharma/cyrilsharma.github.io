@@ -12,7 +12,6 @@ import { BASE_PATH } from "./src/site.mjs";
 
 const meta = JSON.parse(fs.readFileSync("./meta.json", "utf8"));
 const rawPages = meta
-  .filter((v) => v.section !== "local")
   .map((v) => `https://cyrilsharma.github.io${BASE_PATH}/${v.section}/${v.slug}/raw.txt`);
 
 // https://astro.build/config
@@ -58,18 +57,21 @@ export default defineConfig({
             }
           }
 
-          const TYP_DIRS = {
-            "content/blog": "blog",
-            "content/notes": "notes",
-            "local/article": "local",
+          const ARTICLE_DIR = "content/articles";
+          const articlePath = (section, slug) => `${ARTICLE_DIR}/${section}.${slug}.typ`;
+          const articleIdentity = (file) => {
+            if (!file.endsWith(".typ") || !file.includes(`/${ARTICLE_DIR}/`)) return null;
+            const name = path.basename(file, ".typ");
+            const match = name.match(/^(blog|notes)\.(.+)$/);
+            return match ? { section: match[1], slug: match[2] } : null;
           };
 
           server.watcher.add(`./html/**/*.html`);
-          for (const dir of Object.keys(TYP_DIRS)) server.watcher.add(`./${dir}`);
+          server.watcher.add(`./${ARTICLE_DIR}`);
 
           server.watcher.on("add", (file) => {
             if (!file.endsWith(".typ")) return;
-            if (!Object.keys(TYP_DIRS).some(d => file.includes(d))) return;
+            if (!file.includes(`/${ARTICLE_DIR}/`)) return;
             console.log(`[make] new file detected: ${file}, running make...`);
             const proc = spawn("make", [], { stdio: "inherit" });
             proc.on("exit", (code) => {
@@ -79,21 +81,18 @@ export default defineConfig({
           });
           server.watcher.on("change", (file) => {
             if (!file.endsWith(".typ")) return;
-            const dir = Object.keys(TYP_DIRS).find(d => file.includes(d));
-            if (!dir) return;
-            const prefix = TYP_DIRS[dir];
-            const slug = path.basename(file, ".typ");
-            server.ws.send({ type: "custom", event: "typst-navigate", data: { prefix, slug } });
+            const article = articleIdentity(file);
+            if (!article) return;
+            server.ws.send({ type: "custom", event: "typst-navigate", data: { prefix: article.section, slug: article.slug } });
           });
           const typstWatchers = new Map();
           server.middlewares.use((req, _res, next) => {
-            const match = req.url?.match(/^\/(blog|notes|local)\/([^/?@]+)\//);
+            const match = req.url?.match(/^\/(blog|notes)\/([^/?@]+)\//);
             if (!match) return next();
             const [, urlPrefix, slug] = match;
             const watchKey = `${urlPrefix}/${slug}`;
             if (typstWatchers.has(watchKey)) return next();
-            const typDirMap = /** @type {Record<string,string>} */({ blog: "content/blog", notes: "content/notes", local: "local/article" });
-            const typFile = `${typDirMap[urlPrefix]}/${slug}.typ`;
+            const typFile = articlePath(urlPrefix, slug);
             if (fs.existsSync(typFile)) {
               fs.mkdirSync(`html/${urlPrefix}/${slug}`, { recursive: true });
               server.watcher.add(`./html/${urlPrefix}/${slug}/index.html`);

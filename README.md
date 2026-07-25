@@ -43,7 +43,17 @@ Install suggseted extensions:
 
 ## Writing
 
-Create a new blog post in `content/article`:
+Write new drafts in `content/articles`. Plain files in that folder are ignored by
+the build until `just publish` turns them into article files.
+
+Published article filenames use `<section>.<slug>.typ`, for example:
+
+```text
+content/articles/blog.personal-info.typ
+content/articles/notes.linear-algebra.typ
+```
+
+Renderable files use the blog template:
 
 ```typ
 #import "/typ/templates/blog.typ": main
@@ -53,8 +63,6 @@ Create a new blog post in `content/article`:
   date: "2025-04-25",
 )
 ```
-
-There is a sample blog post in [`content/article/personal-info.typ`](./content/article/personal-info.typ).
 
 ## Deploying to GitHub Pages
 

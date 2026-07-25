@@ -1,10 +1,10 @@
 write:
   export TYPST_ROOT='/Users/csharma/CS/Blog'
-  ./.venv/bin/python ./scripts/writer.py
+  uv run ./scripts/writer.py
 
 publish:
   export TYPST_ROOT='/Users/csharma/CS/Blog'
-  ./.venv/bin/python ./scripts/publisher.py
+  uv run ./scripts/publisher.py
 
 push:
-  ./.venv/bin/python ./scripts/push.py
+  uv run ./scripts/push.py

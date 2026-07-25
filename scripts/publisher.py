@@ -1,29 +1,34 @@
 #!/usr/bin/env python3
 import questionary
 import datetime, os, re, sys
-LOCAL_DIR = "./local/article"
-SECTION_DIRS = {
-    "blog":  "./content/blog",
-    "notes": "./content/notes",
-}
+ARTICLE_DIR = "./content/articles"
+SECTIONS = ("blog", "notes")
 
 def iso_timestamp():
     now = datetime.datetime.now().astimezone().replace(microsecond=0)
     return now.isoformat()
 
 def list_drafts():
-    if not os.path.isdir(LOCAL_DIR):
+    if not os.path.isdir(ARTICLE_DIR):
         return []
     files = [
-        (os.path.getmtime(p := os.path.join(LOCAL_DIR, f)), f, p)
-        for f in os.listdir(LOCAL_DIR) if f.endswith(".typ")
+        (os.path.getmtime(p := os.path.join(ARTICLE_DIR, f)), f, p)
+        for f in os.listdir(ARTICLE_DIR) if f.endswith(".typ")
     ]
     files.sort(reverse=True)
     return files
 
+def split_article_name(fname):
+    stem = fname[:-4]
+    for section in SECTIONS:
+        prefix = f"{section}."
+        if stem.startswith(prefix):
+            return section, stem[len(prefix):]
+    return None, stem
+
 def find_published(slug):
-    for section, d in SECTION_DIRS.items():
-        path = f"{d}/{slug}.typ"
+    for section in SECTIONS:
+        path = f"{ARTICLE_DIR}/{section}.{slug}.typ"
         if os.path.exists(path):
             return section, path
     return None, None
@@ -63,7 +68,7 @@ def write_file(path, content):
 def main():
     drafts = list_drafts()
     if not drafts:
-        print("No drafts found in local/article.")
+        print("No drafts found in content/articles.")
         sys.exit(1)
 
     choices = [
@@ -77,17 +82,25 @@ def main():
     if not picked:
         sys.exit(0)
     src_fname, src_path = picked
-    local_slug = src_fname[:-4]
+    current_section, local_slug = split_article_name(src_fname)
     section, dest_path = find_published(local_slug)
 
-    if dest_path:
+    if current_section:
+        section = current_section
+        dest_path = src_path
+        with open(dest_path) as f:
+            existing = f.read()
+        title, tags = extract_meta(existing)
+        slug = local_slug
+        print(f"Updating existing: {dest_path}")
+    elif dest_path:
         with open(dest_path) as f:
             existing = f.read()
         title, tags = extract_meta(existing)
         slug = local_slug
         print(f"Updating existing: {dest_path}")
     else:
-        section = questionary.select("Section:", choices=["blog", "notes"]).ask()
+        section = questionary.select("Section:", choices=list(SECTIONS)).ask()
         if not section:
             sys.exit(0)
 
@@ -105,10 +118,8 @@ def main():
             if tags:
                 break
             print("At least one tag is required.")
-
-        dest_dir = SECTION_DIRS[section]
-        os.makedirs(dest_dir, exist_ok=True)
-        dest_path = f"{dest_dir}/{slug}.typ"
+        os.makedirs(ARTICLE_DIR, exist_ok=True)
+        dest_path = f"{ARTICLE_DIR}/{section}.{slug}.typ"
 
     # Build canonical content from local source + resolved metadata
 
@@ -116,14 +127,11 @@ def main():
         raw_body = strip_header(f.read())
     canonical = build_frontmatter(title, tags) + raw_body
 
-    # Write to published destination
+    # Write to canonical destination
     write_file(dest_path, canonical)
 
-    # Sync local draft: rename if slug changed, then write canonical content back
-    new_local_path = f"{LOCAL_DIR}/{slug}.typ"
-    if new_local_path != src_path:
-        os.rename(src_path, new_local_path)
-    write_file(new_local_path, canonical)
+    if dest_path != src_path and os.path.exists(src_path):
+        os.remove(src_path)
 
     print(f"\nPublished: {dest_path}")
     print(f"URL:       http://localhost:4321/{section}/{slug}/")

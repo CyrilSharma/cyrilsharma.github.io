@@ -8,7 +8,6 @@ import type { PaletteItem } from "./CommandPalette";
 const SECTION_LABEL: Record<string, string> = {
   blog: "Blog",
   notes: "Notes",
-  local: "Local",
 };
 
 const urlPath = Astro.url.pathname;
@@ -16,18 +15,14 @@ const isActive = (segment: string) => {
   const prefix = `${BASE_PATH}/${segment}`;
   return urlPath === prefix || urlPath.startsWith(prefix + "/");
 };
-const dev = import.meta.env.DEV;
-
 const allPosts = await getCollection("blog");
-const filteredPosts = allPosts.filter((p) => dev || p.data.section !== "local");
 
 const pageItems: PaletteItem[] = [
   { label: "Blog",  href: `${BASE_PATH}/blog`,  group: "page" },
   { label: "Notes", href: `${BASE_PATH}/notes`, group: "page" },
-  ...(dev ? [{ label: "Local", href: `${BASE_PATH}/local`, group: "page" as const }] : []),
 ];
 
-const postItems: PaletteItem[] = filteredPosts.map((p) => {
+const postItems: PaletteItem[] = allPosts.map((p) => {
   const href = `${BASE_PATH}/${SECTION_URL[p.data.section] ?? p.data.section}/${p.data.slug}/`;
   return {
     label: p.data.title,
@@ -38,7 +33,7 @@ const postItems: PaletteItem[] = filteredPosts.map((p) => {
   };
 });
 
-const headingItems: PaletteItem[] = filteredPosts.flatMap((p) => {
+const headingItems: PaletteItem[] = allPosts.flatMap((p) => {
   const href = `${BASE_PATH}/${SECTION_URL[p.data.section] ?? p.data.section}/${p.data.slug}/`;
   return extractHeadings(p.id, p.data.title, href).map((h) => ({
     label: h.text,
@@ -50,7 +45,7 @@ const headingItems: PaletteItem[] = filteredPosts.flatMap((p) => {
   }));
 });
 
-const currentPostId = filteredPosts.find((p) => {
+const currentPostId = allPosts.find((p) => {
   const href = `${BASE_PATH}/${SECTION_URL[p.data.section] ?? p.data.section}/${p.data.slug}/`;
   return urlPath === href || urlPath === href.replace(/\/$/, "");
 })?.id;
@@ -59,7 +54,7 @@ const rssUrl = new URL(`${BASE_PATH}/rss.xml`, Astro.site).href;
 
 const commandItems: PaletteItem[] = [
   { label: "Copy RSS URL", href: `clipboard:${rssUrl}`, group: "command" },
-  ...(currentPostId ? filteredPosts.filter(p => p.id === currentPostId).map(p => ({
+  ...(currentPostId ? allPosts.filter(p => p.id === currentPostId).map(p => ({
     label: "View Raw",
     href: `${BASE_PATH}/${SECTION_URL[p.data.section] ?? p.data.section}/${p.data.slug}/raw.txt`,
     group: "command" as const,
@@ -89,7 +84,6 @@ const items: PaletteItem[] = [...pageItems, ...postItems, ...headingItems, ...co
   <nav>
     <a href={`${BASE_PATH}/blog`} class={isActive("blog") ? "active" : ""}>Blog</a>
     <a href={`${BASE_PATH}/notes`} class={isActive("notes") ? "active" : ""}>Notes</a>
-    {dev && <a href={`${BASE_PATH}/local`} class={isActive("local") ? "active" : ""}>Local</a>}
     <button id="rss-btn" class="cp-trigger" data-url={rssUrl} aria-label="Copy RSS URL" title="Copy RSS URL">
       <svg class="rss-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
         <path d="M4 11a9 9 0 0 1 9 9" />
