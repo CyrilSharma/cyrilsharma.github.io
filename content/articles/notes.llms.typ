@@ -1,6 +1,6 @@
 #import "/typ/templates/blog.typ": *
 #show: main.with(
-  title: "Llms",
+  title: "LLMs",
   desc: "",
   date: "2026-07-24T18:13:49-04:00",
   tags: ("ml",),
