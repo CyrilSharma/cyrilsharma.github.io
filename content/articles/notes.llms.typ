@@ -27,7 +27,7 @@ The architecture of a prototypical LLM is actually remarkably simple.
 
 
 *Layer*
-#let idiomatic_arch = align(center, graphic(diagram(
+#let idiomatic_arch = graphic(align(center, diagram(
   spacing: (8mm, 11mm),
   node-fill: white,
   node-stroke: 0.55pt,
@@ -37,20 +37,21 @@ The architecture of a prototypical LLM is actually remarkably simple.
   edge-stroke: 0.55pt,
   mark-scale: 70%,
 
-  node((0,0),        [Hidden],    name: <in>),    edge("-|>"),
-  node((rel: (1,0)), [Attention], name: <attn>),  edge("-|>"),
-  node((rel: (1,0)), [Add],       name: <add1>),  edge("-|>"),
+  node((0,0),        [Hidden],    name: <in>),   edge("-|>"),
   node((rel: (1,0)), [Norm],      name: <norm1>), edge("-|>"),
-  node((rel: (1,0)), [FFN],       name: <ffn>),   edge("-|>"),
-  node((rel: (1,0)), [Add],       name: <add2>), edge("-|>"),
+  node((rel: (1,0)), [Attention], name: <attn>), edge("-|>"),
+  node((rel: (1,0)), [Add],       name: <add1>), edge("-|>"),
   node((rel: (1,0)), [Norm],      name: <norm2>), edge("-|>"),
+  node((rel: (1,0)), [FFN],       name: <ffn>),  edge("-|>"),
+  node((rel: (1,0)), [Add],       name: <add2>), edge("-|>"),
   node((rel: (1,0)), [Hidden],    name: <out>),
 
-  tap(<attn>, <tap1>),
-  tap(<ffn>,  <tap2>),
+  tap(<norm1>, <tap1>),
+  tap(<norm2>,  <tap2>),
   skip(<tap1>, <add1>),
   skip(<tap2>, <add2>),
 )))
+
 #idiomatic_arch
 
 *Network*
@@ -72,6 +73,26 @@ The architecture of a prototypical LLM is actually remarkably simple.
 
 Attention mixes across _time_, FFNs mix across _token dimensions_.
 
+== Input Processing
+To process language, we first have to turn it into a machine-friendly format. Here's the process
+
+=== Tokenization
+Essentially, break the text up into smaller pieces called tokens. These are not _words_, although both words and tokens can be considered groups of bytes.
+
++ Why are we using words at all, why not just use characters?
+  - As we will later see, Attention takes $O(T^2)$ time to process a sequence of length $T$. Thus, reducing the length of the sequence it processes is a useful optimization.
+  - There's also this intuition that the _unit_ of attention should be semantically meaningful. If you treat attention as a key-value lookup system, it makes sense that being able to search via a semantically meaningful "word-esque" thing is more powerful then being able to search by character.
++ Why tokens instead of words?
+  - We can tightly control the number of unique tokens, whereas the number of words is large and out of our control. This is important, because an essential piece of training LLMs is being able to fully model a distribution over their outputs.
+  - Any piece of language (even things like ascii art!) can be split into tokens, whereas only clean, typo-free, language can be split into words.
+
+To decide what your tokens are, you'll typically run an iterative merging algorithm (called Byte Pair Encoding) where you insert every letter as a token. Then, you iteratively merge all instances of the most common token pair into a new token, and you keep going until you reach "enough" tokens. This is very similar to dictionary-based compression methods like Zip. 
+
+Once you've decide what tokens you'll use, you just need to apply the merge rules you obtained in Byte Pair Encoding in the same order t whatever piece of text you want to process. You can do this with a priority-queue. There might be other optimization available. For example, many tokenizers exclude whitespace from their tokens, the inital split-on-whitespace phase is called pretokenization. The "pre-tokens" are small enough that you can cache their tokenizations and this is the approach used in fast tokenizers like #link("https://github.com/marcelroed/gigatoken")[GigaToken].
+
+=== Embedding
+To each unique _token_ we'll associate a random, learnable, vector, called the token's _embedding_. This is typically implemented as a lookup table.
+
 == Attention
 Let $X$ be a sequence of length $T$. Attention is defined as follows.
 $
@@ -89,6 +110,25 @@ A lot can be said about the biases and weaknesses of this operator but I won't g
 === Multi-Head Attention (MHA)
 If $X$ is $T times D$, then partition X across $D$ into nhead sequences, process each of those with attention, and concatenate them. This gives a slight expressivity gain, as you can use different attention mixers for different input dimensions, for the same amount of compute.
 
+=== RoPE
+RoPE is an operator designed to break the permutation equivariance of attention. To be more concrete, the problem is without RoPE the following is true (ignoring the causal mask).
+$
+  "Attention"("Permutation"(X)) = "Permutation"("Attention"(X))
+$
+
+It's pretty bad if your language model doesn't care about the _order_ it sees words! To see how RoPE helps, let's define it.
+$
+  "RoPE"(X_t)_(i, i+1) = R_(t, i) vec(X_t [i], X_t [i+1]) quad R_t = "Rot"(t theta_i)
+$
+
+Now consider $Q K^top = "RoPE"(tilde(Q)) "RoPE"(tilde(K))^top $. 
+$
+  (Q K^top)_(i j) = Q_i dot K_j = sum_k vec(tilde(Q)_(2k), tilde(Q)_(2k+1))^top "Rot"(theta_k (j - i)) vec(tilde(K)_(2k), tilde(K)_(2k+1))
+$
+
+Thus, RoPE adds a _relative-position sensitive_ adjustment to the dot-product breaking the invariance. It's worth noting there are other ways to break permutation-invariance.
+- You can associate each sequence-position with a vector and adding that to the keys and queries, but that makes the relative-position and dot product connection more obtuse and potentially harder to learn.
+- You can rely on the causal mask to break permutation equivariance, which _can_ work but provides no helpful learning bias to the model (RoPE implicitly upweights attention on nearby words).
 
 === FlashAttention
 A naive implementation of Attention computes the $Q K ^T$ matrix upfront and then retrieves it from DRAM when applying it to $V$. This is bad because the memory bandwidth needed scales with the square of the sequence length and on GPUs the memory bandwidth is much lower than the compute bandwidth. Thus, the GPU will spend all its time loading and writing to DRAM instead of doing matrix multiplication.
@@ -193,7 +233,7 @@ Should your model look like this?
 #idiomatic_arch
 
 Or this?
-#graphic(align(center, diagram(
+#align(center, graphic(diagram(
   spacing: (8mm, 11mm),
   node-fill: white,
   node-stroke: 0.55pt,
@@ -203,32 +243,32 @@ Or this?
   edge-stroke: 0.55pt,
   mark-scale: 70%,
 
-  node((0,0),        [Hidden],    name: <in>),   edge("-|>"),
+  node((0,0),        [Hidden],    name: <in>),    edge("-|>"),
+  node((rel: (1,0)), [Attention], name: <attn>),  edge("-|>"),
+  node((rel: (1,0)), [Add],       name: <add1>),  edge("-|>"),
   node((rel: (1,0)), [Norm],      name: <norm1>), edge("-|>"),
-  node((rel: (1,0)), [Attention], name: <attn>), edge("-|>"),
-  node((rel: (1,0)), [Add],       name: <add1>), edge("-|>"),
-  node((rel: (1,0)), [Norm],      name: <norm2>), edge("-|>"),
-  node((rel: (1,0)), [FFN],       name: <ffn>),  edge("-|>"),
+  node((rel: (1,0)), [FFN],       name: <ffn>),   edge("-|>"),
   node((rel: (1,0)), [Add],       name: <add2>), edge("-|>"),
+  node((rel: (1,0)), [Norm],      name: <norm2>), edge("-|>"),
   node((rel: (1,0)), [Hidden],    name: <out>),
 
-  tap(<norm1>, <tap1>),
-  tap(<norm2>,  <tap2>),
+  tap(<attn>, <tap1>),
+  tap(<ffn>,  <tap2>),
   skip(<tap1>, <add1>),
   skip(<tap2>, <add2>),
 )))
 
-Consider the second setup (*Pre-Layer Norm*). The outputs of the FFN are directly added to the residual stream. Thus, over the course of many layers, the residual stream will typically grow larger (e.g. this is similar to a random walk setup where you repeatedly add the same increment). This isn't _explosive_ growth (it's linear or sublinear depending on how correlated you think the increments are). What do the gradients look like?
+Consider the first setup (*Pre-Layer Norm*). The outputs of the FFN are directly added to the residual stream. Thus, over the course of many layers, the residual stream will typically grow larger (e.g. this is similar to a random walk setup where you repeatedly add the same increment). This isn't _explosive_ growth (it's linear or sublinear depending on how correlated you think the increments are). What do the gradients look like?
 
 $
   dx_(t+1)/dx_t = I + (dif "FFN"("LN"(x_t)))/(dif "LN"(x_t)) (dif L N(x_t))/(d x_t)
 $
 
-Now, observe that since $norm(x)$ growing linearly, the layernorm has to scale _down_ by more and more the deeper you go. Hence, as you get really deep into the network the second term vanishes and your block degenerates to something near an identity mapping. This makes it hard to make good use of layers deep in a *Pre-Layer Norm* LLM.
+Now, observe that since $norm(x)$ is growing linearly, the layernorm has to scale _down_ by more and more the deeper you go. Hence, as you get really deep into the network the second term nearly vanishes and your block degenerates to something near an identity mapping. This makes it hard to make good use of layers deep in a *Pre-Layer Norm* LLM.
 
 //  but it means the gradients near the end of the LLM are much larger than those near the start. This can make the effective usage of later layers tricky, as their gradients are too large to converge to good solutions. This is also supposedly the reason *Pre-Layer Norm* LLMs often need a small warmup learning rate, to maintain reasonable sized gradients until the model has entered a "more-stable" optimization landscape.
 
-What about the first setup (*Post-Layer Norm*)? Let's look at the gradient.
+What about the second setup (*Post-Layer Norm*)? Let's look at the gradient.
 $
   dx_(t+1)/dx_t = (dif "LN"("FFN"(x_t) + x_t))/(dif "FFN"(x_t)) (dif "FFN"(x_t))/(d x_t) + (dif "LN"("FFN"(x_t) + x_t))/(dif x_t) = \
     ((dif "LN"("FFN"(x_t) + x_t))/(dif "FFN"(x_t)))(I + (dif "FFN"(x_t))/(d x_t) )
@@ -236,12 +276,7 @@ $
 
 This recurrence has a compounding effect. Notice this is a bit different then the previous recurrence, as that one approached 1 as you got deeper in the network, this recurrence has no such property. Thus, it's very easy for gradients to get too large or too small (gradient spikes and/or near-zero gradients), especially the closer we get to the first layer. This is why having a small _warmup_ rate is essentially for this type of architecture, as it keeps the gradients small until you get to a stable optimization region. Still, this isn't enough to completely eliminate the instability, and so despite the growing hidden state activations, *Pre-Layer Norm* is often preferred.
 
-As you can see, neither *Pre* nor *Post* Layernorm is completely satisfactory, and this has motivated a bunch of interesting approaches. One option is to try fixing the problems of *Pre*-norm by intelligently doing some kind of depth-based learning rate scaling. Alternatively you could try to fix the problems of *Post*-norm and prevent the compounding gradient problem. This is what Attention Residuals by MoonshotAI did. Instead of _adding_ the outputs of your module to the residual stream and then norming, you use Attention (without Value Projection) over the outputs of your modules and plug THAT into the norm. As mentioned before, you can think of attention as a carefully chosen mixer matrix applied to its values. Without a Value projection we thus have...
-$
-  O = W_"Attention" X W_V => O = W_"Attention" X
-$
-
-$W_"Attention"$ computes a convex combination over $X$, so the input to the norm stays roughly the same magnitude throughout all layers, preventing output _and_ gradient norms from growing.
+As you can see, neither *Pre* nor *Post* Layernorm is completely satisfactory, and this has motivated a bunch of interesting approaches. One option is to try fixing the problems of *Pre*-norm by intelligently doing some kind of depth-based learning rate scaling. Alternatively you could try to fix the output scaling problems of *Pre*-norm directly. This is what Attention Residuals by MoonshotAI did. Instead of _adding_ the outputs of your module to the residual stream and then norming, you use Attention (without Value Projection) over the outputs of your modules and plug THAT into the norm.
 
 #align(center, graphic(diagram(
   spacing: (8mm, 11mm),
@@ -254,14 +289,15 @@ $W_"Attention"$ computes a convex combination over $X$, so the input to the norm
   mark-scale: 70%,
 
   node((0,-0.5),      [Past Hidden States],    name: <stream>),  edge("-|>"),
-  node((0,0), [Attention], name: <attn>),  edge("-|>"),
-  node((rel: (1,0)), [ResidualAttn],      name: <r1>), edge("-|>"),
-  node((rel: (1,0)), [Norm], name: <norm2>),  edge("-|>"),
-  node((rel: (1,0)), [FFN],       name: <ffn>),   edge("-|>"),
-  node((rel: (1,0)), [ResidualAttn],      name: <r2>), edge("-|>"),
-  node((rel: (1,0)), [Norm],    name: <norm1>),
+  node((0, 0),        [Norm], name: <norm2>),  edge("-|>"),
+  node((rel: (1,0)),  [Attention], name: <attn>),
+  node((rel: (1,0)),  [ResidualAttn],      name: <r1>), edge("-|>"),
+  node((rel: (1,0)), [Norm],    name: <norm1>),  edge("-|>"),
+  node((rel: (1,0)),  [FFN],       name: <ffn>),
+  node((rel: (1,0)),  [ResidualAttn],      name: <r2>),
 
   skip(<attn>, <r2>),
+  skip(<ffn>, <r2>),
   edge(
     <stream>,
     (rel: (0, -.5), to: <r1>),
@@ -275,6 +311,28 @@ $W_"Attention"$ computes a convex combination over $X$, so the input to the norm
     layer: -1
   ),
 )))
+
+Because they don't use a value projection, we essentially have $O = W_"Attention" X$ which is a convex linear operation; it's output cannot have a higher norm then all of its inputs. This immediately addresses the growing output norm problems.
+
+What do the gradients look like? Going back a single hop it looks like...
+$
+  dx_(t+1)/dx_t = (dif "ResA"(h_0, ..., h_(t + 1)))/(dif h_(t + 1)) (dif "Attn"("LN"(x_t)))/(dif "LN"(x_t)) (dif "LN"(x_t))/(dif x_t) = \
+  a_(t -> t+1) J_(t)
+$
+
+Going back more hops it's going to look like 
+$
+  dx_(i)/dx_j = sum_("p" in "paths from i to j") product_("edge" u,v in "p") a_(u -> v) J_u
+$
+
+And for the sake of being able to reason about this, if we assume the gradients are roughly the same norm, this is going to look like entries of the matrix
+$
+  (sum_k A^k)_(i j)
+$
+
+// TODO: THIS IS REALLY NOT CLEAR (but I think a decent way of viewing this)
+Where $A$ is the overall layerwise attention matrix. From this analysis, it becomes clear that the gradient grows exponentially with depth for pre-norm, but only linearly for Residual Attention.
+
 
 == Scaling
 When you start making models bigger, you quickly start running into a lot of performance bottlenecks. Your main avenue for addressing them is to somehow share the load across more and more GPUs which motivates a lot of interesting parallelism strategies. All of these strategies have _limits_ for any given model, so you'll often end up using more then one of them. Libraries like Megatron handle choosing the optimal combination of these strategies for you.
