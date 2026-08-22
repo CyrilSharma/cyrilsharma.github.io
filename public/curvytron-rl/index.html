@@ -1,0 +1,65 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="play-server" content="https://cyrilsharma--curvytron-play-web.modal.run">
+  <title>Curvytron — play</title>
+  <link rel="stylesheet" href="./components/themes/light.css">
+  <link rel="stylesheet" href="./static/play.css">
+</head>
+<body>
+  <section id="game-wrapper">
+    <aside id="game-infos">
+      <header><a class="logo" href="./"><img src="./static/logo.svg" alt="Curvytron"><span>Curvytron</span></a></header>
+      <h1 id="game-name">Play<span id="debug-tick" class="hidden"></span></h1>
+      <sl-dropdown id="game-settings-dropdown" placement="bottom-end" hoist stay-open-on-select>
+        <button id="game-settings" type="button" slot="trigger" aria-label="Game settings">⚙</button>
+        <div class="game-settings-menu">
+          <label>
+            <span>Decision every</span>
+            <sl-input id="decision-interval" type="number" min="1" max="10000" step="1" value="16"></sl-input>
+            <span>ticks</span>
+          </label>
+          <p>Space stops at the next boundary. Then ←, ↑, →, N, and R inspect one tick at a time. C lets you click a controller target.</p>
+        </div>
+      </sl-dropdown>
+      <div id="player-editor">
+        <div id="player-search">
+          <sl-input id="player-search-input" type="search" placeholder="Add player or checkpoint..." autocomplete="off" spellcheck="false" role="combobox" aria-expanded="false" aria-controls="player-options"></sl-input>
+          <div id="player-options" class="hidden" role="listbox"></div>
+        </div>
+      </div>
+      <div id="player-list" class="game-players"></div>
+    </aside>
+    <main id="col-right">
+      <div id="waiting" class="waiting">
+        <div>
+          <p id="result" class="result"><span id="result-label"></span><span id="result-winner"></span></p>
+          <p id="msg">Connecting...</p>
+          <ul id="waiting-players"></ul>
+        </div>
+      </div>
+      <div id="warmup"></div>
+      <div id="end" class="hidden">
+        <div>
+          <p id="end-title"><span id="end-label"></span><span id="end-winner"></span></p>
+          <p id="end-detail"></p>
+          <div id="replay-controls" class="hidden">
+            <sl-range id="replay-slider" min="0" value="0" step="1" tooltip="none" aria-label="Replay position"></sl-range>
+            <output id="replay-time" for="replay-slider"></output>
+            <div id="replay-actions"><button id="replay-play" type="button">Pause</button></div>
+          </div>
+        </div>
+      </div>
+      <div id="render" class="game-render">
+        <canvas id="bg" width="600" height="600"></canvas>
+        <canvas id="overlays" width="600" height="600"></canvas>
+        <canvas id="fg" width="600" height="600"></canvas>
+      </div>
+    </main>
+  </section>
+
+  <script type="module" src="./static/play.js"></script>
+</body>
+</html>
