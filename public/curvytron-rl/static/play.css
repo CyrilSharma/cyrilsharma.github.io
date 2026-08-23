@@ -234,20 +234,27 @@ sl-dropdown:not(:defined) .player-settings-menu { display: none; }
     #overlays { z-index: 45; pointer-events: none; }
     #fg { z-index: 50; }
     .waiting, #end { position: absolute; inset: 0; z-index: 110; }
-    .waiting { display: grid; place-content: center; padding: 24px; }
+    .waiting { top: 25%; bottom: auto; display: grid; justify-content: center; padding: 0 24px; }
     .waiting > div, #end > div { width: min(620px, calc(100vw - 48px)); max-width: 100%; text-align: center; }
-    .waiting.has-result > div, #end > div {
-      width: min(620px, calc(100vw - 48px));
-      padding: 24px 30px;
-      background: rgba(255, 255, 255, .9);
-      color: #222;
-      border: 1px solid rgba(255, 255, 255, .7);
-      border-radius: 8px;
-      box-shadow: 0 6px 24px rgba(0, 0, 0, .22);
-    }
     .waiting.hidden, #end.hidden { display: none; }
-    .waiting .result { margin: 0 0 12px; color: #fff; font-size: 40px; font-weight: 700; overflow-wrap: anywhere; }
-    .waiting #msg { margin: 0 0 18px; color: rgba(255, 255, 255, .65); font-size: 18px; font-weight: 400; overflow-wrap: anywhere; }
+    .waiting .result { margin: 0 0 12px; color: #fff; font-size: 40px; font-weight: 300; overflow-wrap: anywhere; }
+    .waiting #msg { margin: 0 0 18px; color: #fff; font-size: 30px; font-weight: 300; overflow-wrap: anywhere; }
+    .waiting.ready, .waiting.waking { top: 0; bottom: 0; align-content: center; }
+    .waiting.ready #msg, .waiting.waking #msg { color: rgba(255, 255, 255, .68); font-size: 18px; font-weight: 400; }
+    .game-key {
+      display: inline-grid;
+      min-width: 34px;
+      height: 34px;
+      margin: 0 7px;
+      place-items: center;
+      border: 1px solid rgba(255, 255, 255, .45);
+      border-bottom-width: 3px;
+      border-radius: 5px;
+      background: rgba(255, 255, 255, .08);
+      color: #fff;
+      font: 600 15px/1 Lato, "Helvetica Neue", Helvetica, sans-serif;
+      vertical-align: middle;
+    }
     .waiting.waking #msg::before {
       display: inline-block;
       width: .8em;
@@ -261,27 +268,26 @@ sl-dropdown:not(:defined) .player-settings-menu { display: none; }
     }
     @keyframes waking-spin { to { transform: rotate(360deg); } }
     .waiting ul { margin: 0; padding: 0; color: #fff; font-size: 20px; list-style: none; text-align: center; }
-    .waiting.has-result .result { color: #222; }
-    .waiting.has-result #msg { color: rgba(34, 34, 34, .62); }
-    .waiting.has-result ul { color: #222; }
     .waiting li { margin: 6px 0; overflow-wrap: anywhere; text-align: center; }
-    #end { display: block; background: transparent; pointer-events: none; }
+    #end { display: block; background: rgba(21, 21, 21, .8); pointer-events: none; }
     #end > div {
       position: absolute;
       top: 50%;
       left: 50%;
+      width: min(620px, calc(100vw - 48px));
+      padding: 24px 30px;
       transform: translate(-50%, -50%);
       cursor: grab;
       pointer-events: auto;
     }
     #end > div.dragging { cursor: grabbing; user-select: none; }
-    #end-title { margin: 0; color: #222; font-size: 48px; font-weight: 700; text-align: center; }
-    #end-detail { margin: 18px 0 0; color: rgba(34, 34, 34, .62); font-size: 18px; }
+    #end-title { margin: 0; color: #fff; font-size: 48px; font-weight: 300; text-align: center; }
+    #end-detail { margin: 18px 0 0; color: rgba(255, 255, 255, .6); font-size: 18px; }
     #replay-controls { margin-top: 24px; }
     #replay-actions { display: flex; justify-content: center; margin-top: 12px; }
-    #replay-play { padding: 6px 12px; border: 1px solid #888; border-radius: 4px; background: #f7f7f7; color: #222; cursor: pointer; font: inherit; }
-    #replay-slider { --thumb-size: 14px; --track-color-active: var(--accent-end); --track-color-inactive: #d7d7d7; display: block; width: 100%; }
-    #replay-time { display: block; margin-top: 8px; color: rgba(34, 34, 34, .62); font-size: 14px; text-align: center; }
+    #replay-play { padding: 6px 12px; border: 1px solid rgba(255, 255, 255, .55); border-radius: 4px; background: transparent; color: #fff; cursor: pointer; font: inherit; }
+    #replay-slider { --thumb-size: 14px; --track-color-active: var(--accent-end); --track-color-inactive: #444; display: block; width: 100%; }
+    #replay-time { display: block; margin-top: 8px; color: rgba(255, 255, 255, .6); font-size: 14px; text-align: center; }
     #warmup { display: none; }
     @media (max-width: 899px) {
       #game-infos { display: none; }
