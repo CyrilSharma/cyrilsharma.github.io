@@ -248,6 +248,18 @@ sl-dropdown:not(:defined) .player-settings-menu { display: none; }
     .waiting.hidden, #end.hidden { display: none; }
     .waiting .result { margin: 0 0 12px; color: #fff; font-size: 40px; font-weight: 700; overflow-wrap: anywhere; }
     .waiting #msg { margin: 0 0 18px; color: rgba(255, 255, 255, .65); font-size: 18px; font-weight: 400; overflow-wrap: anywhere; }
+    .waiting.waking #msg::before {
+      display: inline-block;
+      width: .8em;
+      height: .8em;
+      margin-right: 10px;
+      border: 2px solid rgba(255, 255, 255, .25);
+      border-top-color: #fff;
+      border-radius: 50%;
+      animation: waking-spin .8s linear infinite;
+      content: "";
+    }
+    @keyframes waking-spin { to { transform: rotate(360deg); } }
     .waiting ul { margin: 0; padding: 0; color: #fff; font-size: 20px; list-style: none; text-align: center; }
     .waiting.has-result .result { color: #222; }
     .waiting.has-result #msg { color: rgba(34, 34, 34, .62); }
