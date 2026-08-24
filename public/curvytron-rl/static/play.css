@@ -82,7 +82,8 @@
       background: #252525;
       color: #eee;
     }
-    .game-settings-menu label { display: grid; grid-template-columns: auto 72px auto; align-items: center; gap: 8px; }
+    .game-settings-menu label { display: grid; grid-template-columns: minmax(0, 1fr) 72px 38px; align-items: center; gap: 8px; }
+    .game-settings-menu label + label { margin-top: 8px; }
     .game-settings-menu sl-input::part(base) { border-color: #555; background: #1f1f1f; }
     .game-settings-menu sl-input::part(input) { color: #fff; }
     .game-settings-menu p { margin: 10px 0 0; color: #aaa; font-size: 12px; }
@@ -149,7 +150,7 @@
       position: relative;
       display: grid;
       align-items: center;
-      grid-template-columns: minmax(0, 1fr) 24px;
+      grid-template-columns: minmax(0, 1fr) 24px 38px;
       min-height: 52px;
       padding: 10px 9px 10px 38px;
       border-bottom: 2px solid #3b3b3b;
@@ -220,6 +221,14 @@ sl-dropdown:not(:defined) .player-settings-menu { display: none; }
     }
     .player-remove:hover { background: rgba(255, 255, 255, .12); color: #fff; }
     .player-remove.hidden { display: none; }
+    .player-score {
+      grid-column: 3;
+      justify-self: end;
+      color: #fff;
+      font-size: 22px;
+      font-variant-numeric: tabular-nums;
+      font-weight: 500;
+    }
     #player-list.locked .player-remove { cursor: not-allowed; opacity: .3; pointer-events: none; }
     #col-right { right: 0; left: var(--aside-width); display: grid; place-items: center; text-align: center; }
     .game-render {
@@ -239,8 +248,8 @@ sl-dropdown:not(:defined) .player-settings-menu { display: none; }
     .waiting.hidden, #end.hidden { display: none; }
     .waiting .result { margin: 0 0 12px; color: #fff; font-size: 40px; font-weight: 300; overflow-wrap: anywhere; }
     .waiting #msg { margin: 0 0 18px; color: #fff; font-size: 30px; font-weight: 300; overflow-wrap: anywhere; }
-    .waiting.ready, .waiting.waking { top: 0; bottom: 0; align-content: center; }
-    .waiting.ready #msg, .waiting.waking #msg { color: rgba(255, 255, 255, .68); font-size: 18px; font-weight: 400; }
+    .waiting.ready, .waiting.waking, .waiting.loading { top: 0; bottom: 0; align-content: center; }
+    .waiting.ready #msg, .waiting.waking #msg, .waiting.loading #msg { color: rgba(255, 255, 255, .68); font-size: 18px; font-weight: 400; }
     .game-key {
       display: inline-grid;
       min-width: 34px;
@@ -255,7 +264,7 @@ sl-dropdown:not(:defined) .player-settings-menu { display: none; }
       font: 600 15px/1 Lato, "Helvetica Neue", Helvetica, sans-serif;
       vertical-align: middle;
     }
-    .waiting.waking #msg::before {
+    .waiting.waking #msg::before, .waiting.loading #msg::before {
       display: inline-block;
       width: .8em;
       height: .8em;
