@@ -239,8 +239,8 @@ sl-dropdown:not(:defined) .player-settings-menu { display: none; }
     .waiting.hidden, #end.hidden { display: none; }
     .waiting .result { margin: 0 0 12px; color: #fff; font-size: 40px; font-weight: 300; overflow-wrap: anywhere; }
     .waiting #msg { margin: 0 0 18px; color: #fff; font-size: 30px; font-weight: 300; overflow-wrap: anywhere; }
-    .waiting.ready, .waiting.waking, .waiting.loading { top: 0; bottom: 0; align-content: center; }
-    .waiting.ready #msg, .waiting.waking #msg, .waiting.loading #msg { color: rgba(255, 255, 255, .68); font-size: 18px; font-weight: 400; }
+    .waiting.ready, .waiting.waking { top: 0; bottom: 0; align-content: center; }
+    .waiting.ready #msg, .waiting.waking #msg { color: rgba(255, 255, 255, .68); font-size: 18px; font-weight: 400; }
     .game-key {
       display: inline-grid;
       min-width: 34px;
@@ -255,7 +255,7 @@ sl-dropdown:not(:defined) .player-settings-menu { display: none; }
       font: 600 15px/1 Lato, "Helvetica Neue", Helvetica, sans-serif;
       vertical-align: middle;
     }
-    .waiting.waking #msg::before, .waiting.loading #msg::before {
+    .waiting.waking #msg::before {
       display: inline-block;
       width: .8em;
       height: .8em;
