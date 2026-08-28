@@ -86,6 +86,8 @@
     .game-settings-menu label + label { margin-top: 8px; }
     .game-settings-menu sl-input::part(base) { border-color: #555; background: #1f1f1f; }
     .game-settings-menu sl-input::part(input) { color: #fff; }
+    .game-settings-menu > sl-checkbox { display: block; margin-top: 10px; }
+    .game-settings-menu > sl-checkbox::part(label) { color: #eee; }
     .game-settings-menu p { margin: 10px 0 0; color: #aaa; font-size: 12px; }
     sl-dropdown:not(:defined) .game-settings-menu { display: none; }
     #player-editor {

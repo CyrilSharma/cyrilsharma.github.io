@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="play-server" content="https://cyrilsharma--curvytron-play-playserver-start.us-east.modal.run">
-  <script id="play-catalog" type="application/json">[{"spec": "you", "label": "You", "kind": "human"}, {"spec": "ckpt:/build/checkpoints/ar_skill_geometry_d256_lidar180_scratch_200/checkpoint_1600.safetensors", "label": "Shai Hulud", "kind": "checkpoint"}]</script>
+  <script id="play-catalog" type="application/json">[{"spec": "you", "label": "You", "kind": "human"}, {"spec": "ckpt:/build/checkpoints/query_mlp_static_grid25_lidar180_path64_conv2_allpoints_mlp1024x2_target_g16_selfplay_1600_lr1e5_pool1600_v2/checkpoint_520.safetensors", "label": "Shai Hulud", "kind": "checkpoint"}]</script>
   <title>Curvytron — play</title>
   <link rel="stylesheet" href="./components/themes/light.css">
   <link rel="stylesheet" href="./static/play.css">
@@ -23,11 +23,17 @@
             <span>ticks</span>
           </label>
           <label>
+            <span>Target granularity</span>
+            <sl-input id="target-granularity" type="number" min="1" max="256" step="1" value="16"></sl-input>
+            <span>g</span>
+          </label>
+          <label>
             <span>Victory score</span>
             <sl-input id="victory-score" type="number" min="1" max="100" step="1" value="10"></sl-input>
             <span>points</span>
           </label>
-          <p id="inspection-help">Space stops at the next boundary. Then ←, ↑, →, N, and R inspect one tick at a time. C lets you click a controller target.</p>
+          <sl-checkbox id="deterministic" checked>Deterministic checkpoint play</sl-checkbox>
+          <p id="inspection-help">Space stops at the next boundary. Then ←, ↑, →, N, and R inspect one tick at a time. V refreshes reachability; C lets you click a controller target.</p>
         </div>
       </sl-dropdown>
       <div id="player-editor">
