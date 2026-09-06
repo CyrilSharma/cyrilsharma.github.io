@@ -201,7 +201,21 @@ sl-dropdown:not(:defined) .player-settings-menu { display: none; }
     .player-settings-menu sl-checkbox { display: block; padding: 5px 3px; }
     .player-settings-menu sl-checkbox::part(label) { color: #eee; }
     .player-settings-menu sl-checkbox[disabled]::part(label) { color: #888; }
+    .powerup-configuration { display: grid; gap: 6px; margin-top: 10px; }
+    .powerup-configuration > label { display: block; }
+    .powerup-configuration > label > span, .powerup-configuration > span { color: #aaa; font-size: 12px; }
+    .powerup-configuration sl-range { display: block; margin: 2px 8px 0; }
+    .powerup-presets { display: flex; flex-wrap: wrap; gap: 4px; }
+    .powerup-presets button { padding: 4px 7px; border: 0; border-radius: 3px; background: #333; color: #ddd; cursor: pointer; font: inherit; font-size: 12px; }
+    .powerup-presets button.active, .powerup-presets button:hover { background: #555; color: #fff; }
+    .powerup-selection { min-height: 36px; padding: 3px; border-radius: 4px; background: #1f1f1f; }
+    .powerup-option { width: 32px; height: 32px; margin: 0 3px; padding: 0; border: 0; background-color: transparent; background-image: url("https://www.curvytron.com/images/bonus.png"); background-repeat: no-repeat; background-size: 96px 128px; cursor: pointer; }
+    .powerup-option:hover { filter: brightness(1.2); }
+    .powerup-controls { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 8px; }
+    .powerup-controls > span { flex-basis: 100%; color: #aaa; font-size: 12px; }
     .player-settings-note { margin: 3px 3px 5px; color: #aaa; font-size: 12px; }
+    #curvytron-credit { margin: auto 12px 12px; color: #888; font-size: 11px; line-height: 1.4; }
+    #curvytron-credit a { color: #aaa; }
     .player-name { display: block; grid-column: 1; min-width: 0; padding-right: 8px; overflow-x: auto; overflow-y: hidden; white-space: nowrap; scrollbar-width: none; }
     .player-name::-webkit-scrollbar { display: none; }
     .player-remove {
@@ -240,6 +254,7 @@ sl-dropdown:not(:defined) .player-settings-menu { display: none; }
       border: 4px solid #6e6e6e;
       background: var(--game-background);
     }
+    .game-render.borderless { border-color: transparent; }
     canvas { position: absolute; inset: 0; display: block; width: 100%; height: 100%; }
     #bg { z-index: 30; }
     #overlays { z-index: 45; pointer-events: none; }
@@ -250,8 +265,19 @@ sl-dropdown:not(:defined) .player-settings-menu { display: none; }
     .waiting.hidden, #end.hidden { display: none; }
     .waiting .result { margin: 0 0 12px; color: #fff; font-size: 40px; font-weight: 300; overflow-wrap: anywhere; }
     .waiting #msg { margin: 0 0 18px; color: #fff; font-size: 30px; font-weight: 300; overflow-wrap: anywhere; }
-    .waiting.ready, .waiting.waking, .waiting.loading { top: 0; bottom: 0; align-content: center; }
+    .waiting.ready, .waiting.waking, .waiting.loading, .waiting.client-runtime-loading { top: 0; bottom: 0; align-content: center; }
     .waiting.ready #msg, .waiting.waking #msg, .waiting.loading #msg { color: rgba(255, 255, 255, .68); font-size: 18px; font-weight: 400; }
+    .waiting.client-runtime-loading { pointer-events: none; }
+    .waiting.client-runtime-loading #msg {
+      display: flex;
+      min-height: 34px;
+      align-items: center;
+      justify-content: center;
+      margin: 0 0 18px;
+      color: rgba(255, 255, 255, .42);
+      font-size: 18px;
+      font-weight: 400;
+    }
     .game-key {
       display: inline-grid;
       min-width: 34px;
@@ -277,7 +303,19 @@ sl-dropdown:not(:defined) .player-settings-menu { display: none; }
       animation: waking-spin .8s linear infinite;
       content: "";
     }
+    .waiting.client-runtime-loading #msg::before {
+      display: inline-block;
+      width: 5px;
+      height: 5px;
+      margin-right: 7px;
+      border-radius: 50%;
+      background: currentColor;
+      animation: loading-pulse 1.4s ease-in-out infinite;
+      content: "";
+      vertical-align: 2px;
+    }
     @keyframes waking-spin { to { transform: rotate(360deg); } }
+    @keyframes loading-pulse { 50% { opacity: .25; } }
     .waiting ul { margin: 0; padding: 0; color: #fff; font-size: 20px; list-style: none; text-align: center; }
     .waiting li { margin: 6px 0; overflow-wrap: anywhere; text-align: center; }
     #end { display: block; background: rgba(21, 21, 21, .8); pointer-events: none; }
