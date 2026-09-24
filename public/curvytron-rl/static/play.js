@@ -6613,6 +6613,7 @@ var msg = document.getElementById("msg");
 var waiting = document.getElementById("waiting");
 var waitingPlayers = document.getElementById("waiting-players");
 var end = document.getElementById("end");
+end.style.backgroundColor = "rgba(21, 21, 21, .4)";
 var endLabel = document.getElementById("end-label");
 var endWinner = document.getElementById("end-winner");
 var endDetail = document.getElementById("end-detail");
@@ -6771,9 +6772,13 @@ function resizeBitmap(context, size3, pixelRatio, preserve) {
   context.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
 }
 function resizeCanvases() {
+  const mobile = matchMedia("(max-width: 899px) and (pointer: coarse)").matches;
+  const availableWidth = mobile ? window.innerWidth * 0.82 : window.innerWidth - gameInfos.clientWidth - 8;
+  const availableHeight = mobile ? window.innerHeight * 0.65 : window.innerHeight - 8;
   const size3 = Math.max(1, Math.floor(Math.min(
-    window.innerWidth - gameInfos.clientWidth - 8,
-    window.innerHeight - 8
+    availableWidth,
+    availableHeight,
+    600
   )));
   const pixelRatio = window.devicePixelRatio || 1;
   gameRender.style.width = `${size3 + 8}px`;
