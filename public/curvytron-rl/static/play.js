@@ -88,6 +88,7 @@ function createReplay({ end: end2, slider, time, playButton, render, tickHz }) {
 // python/static/play-avatars.js
 function createAvatarRenderer({ context, colors, size: size3, pixelRatio, simulator: simulator2 }) {
   let avatars = [];
+  const clearedDeadHeads = /* @__PURE__ */ new Set();
   let renderSize2 = size3;
   let renderPixelRatio2 = pixelRatio;
   function position(player) {
@@ -109,9 +110,11 @@ function createAvatarRenderer({ context, colors, size: size3, pixelRatio, simula
   }
   function setPlayers(count) {
     avatars = Array.from({ length: count }, (_2, index) => make(index));
+    clearedDeadHeads.clear();
   }
   function reset() {
     context.clearRect(0, 0, renderSize2, renderSize2);
+    clearedDeadHeads.clear();
     avatars.forEach((avatar) => {
       avatar.clearX = 0;
       avatar.clearY = 0;
@@ -121,8 +124,15 @@ function createAvatarRenderer({ context, colors, size: size3, pixelRatio, simula
   function clear() {
     avatars.forEach((avatar) => context.clearRect(avatar.clearX, avatar.clearY, avatar.clearWidth, avatar.clearWidth));
   }
+  function clearDeadHeads(players) {
+    players.forEach((player, index) => {
+      if (!player.alive) clearedDeadHeads.add(index);
+    });
+  }
   function draw(players) {
     players.forEach((player, index) => {
+      if (player.alive) clearedDeadHeads.delete(index);
+      if (clearedDeadHeads.has(index)) return;
       const avatar = avatars[index];
       const [x2, y3] = position(player);
       const left = x2 - avatar.radius;
@@ -136,9 +146,9 @@ function createAvatarRenderer({ context, colors, size: size3, pixelRatio, simula
   function resize(size4, pixelRatio2) {
     renderSize2 = size4;
     renderPixelRatio2 = pixelRatio2;
-    setPlayers(avatars.length);
+    avatars = Array.from({ length: avatars.length }, (_2, index) => make(index));
   }
-  return { clear, draw, reset, resize, setPlayers };
+  return { clear, clearDeadHeads, draw, reset, resize, setPlayers };
 }
 
 // python/static/play-overlays.js
@@ -7080,6 +7090,7 @@ function showWaiting(text, winnerIndex = null) {
 function showReady(winnerIndex = null) {
   showWaiting("", winnerIndex);
   msg.append("Press ", makeKeycap(START_KEY), " to start");
+  if (matchMedia("(pointer: coarse)").matches) msg.append(" or tap to start");
   waiting.classList.add("ready");
 }
 function showWaking() {
@@ -7097,6 +7108,7 @@ function showClientRuntimeLoading() {
 function showWakeReady() {
   showWaiting("");
   msg.append("Press ", makeKeycap(START_KEY), " to wake Shai Hulud");
+  if (matchMedia("(pointer: coarse)").matches) msg.append(" or tap to wake");
   waiting.classList.add("ready");
 }
 function hideWaiting() {
@@ -7110,11 +7122,16 @@ function showEnd(winnerIndex, ticks, outcome, wonMatch = false) {
     makeKeycap(START_KEY),
     wonMatch ? " to start a new match." : " to play again."
   );
+  if (matchMedia("(pointer: coarse)").matches) endDetail.append(" Tap to continue.");
   replayControls.classList.toggle("hidden", roundFrames.length === 0);
   replay.show(roundFrames);
 }
 function hideEnd() {
   replay.hide();
+}
+function clearRenderedTrails(players) {
+  trailRenderer.reset();
+  avatarRenderer.clearDeadHeads(players);
 }
 function renderReplay(index) {
   const frame = roundFrames[index];
@@ -7123,7 +7140,9 @@ function renderReplay(index) {
   for (let tick = 1; tick <= index; tick++) {
     const previous = roundFrames[tick - 1];
     const current = roundFrames[tick];
-    if (current.trail_generation !== previous.trail_generation) trailRenderer.reset();
+    if (current.trail_generation !== previous.trail_generation) {
+      clearRenderedTrails(current.players);
+    }
     trailRenderer.appendFrame(previous.players, current.players);
   }
   trailRenderer.draw();
@@ -7158,7 +7177,7 @@ function ingestFrame(f3) {
   lastReceivedFrame = f3;
   latestFrameReceivedAt = performance.now();
   if (trailFrame && f3.trail_generation !== trailFrame.trail_generation) {
-    trailRenderer.reset();
+    clearRenderedTrails(f3.players);
   } else if (trailFrame) {
     trailRenderer.appendFrame(trailFrame.players, f3.players);
   }
@@ -7381,8 +7400,11 @@ function connectTransport() {
   else connectWebSocket();
 }
 var held = /* @__PURE__ */ new Set();
+var touchDirections = /* @__PURE__ */ new Map();
+var touchGestures = /* @__PURE__ */ new Map();
 function sendAction() {
-  const l5 = held.has("ArrowLeft"), r8 = held.has("ArrowRight");
+  const l5 = held.has("ArrowLeft") || [...touchDirections.values()].includes("left");
+  const r8 = held.has("ArrowRight") || [...touchDirections.values()].includes("right");
   currentAction = held.has("ArrowUp") || l5 && r8 ? 1 : l5 ? 2 : r8 ? 0 : 1;
   if (clientGame) clientGame.input(currentAction);
   else sendServer({ type: "input", action: currentAction });
@@ -7469,8 +7491,55 @@ victoryScoreInput.addEventListener("sl-change", () => {
   resetMatch();
 });
 function eventTargetsControl(event) {
-  return event.composedPath().some((target) => target instanceof Element && target.matches("input, textarea, [contenteditable], sl-input, sl-range, button, sl-button"));
+  return event.composedPath().some((target) => target instanceof Element && target.matches("input, textarea, select, a, button, [contenteditable], sl-input, sl-range, sl-checkbox, sl-dropdown, sl-button"));
 }
+function eventTargetsScrollbar(event) {
+  return event.composedPath().some((target) => {
+    if (!(target instanceof Element)) return false;
+    const bounds = target.getBoundingClientRect();
+    return target.scrollHeight > target.clientHeight && event.clientX >= bounds.left + target.clientWidth || target.scrollWidth > target.clientWidth && event.clientY >= bounds.top + target.clientHeight;
+  });
+}
+function requestStart() {
+  if (running || startWhenReady) return;
+  hideEnd();
+  if (ready) startRound();
+  else wakeAndStart();
+}
+addEventListener("pointerdown", (event) => {
+  if (event.pointerType !== "touch" || eventTargetsControl(event) || eventTargetsScrollbar(event)) return;
+  touchGestures.set(event.pointerId, { x: event.clientX, y: event.clientY, steering: running });
+  if (!running || paused || !human) return;
+  touchDirections.set(event.pointerId, event.clientX < innerWidth / 2 ? "left" : "right");
+  sendAction();
+});
+addEventListener("pointermove", (event) => {
+  if (!touchDirections.has(event.pointerId)) return;
+  const direction = event.clientX < innerWidth / 2 ? "left" : "right";
+  if (touchDirections.get(event.pointerId) === direction) return;
+  touchDirections.set(event.pointerId, direction);
+  sendAction();
+});
+function endTouch(event) {
+  const gesture = touchGestures.get(event.pointerId);
+  touchGestures.delete(event.pointerId);
+  if (touchDirections.delete(event.pointerId)) sendAction();
+  if (event.type === "pointercancel" || !gesture || gesture.steering) return;
+  if (Math.hypot(event.clientX - gesture.x, event.clientY - gesture.y) > 12) return;
+  requestStart();
+}
+addEventListener("pointerup", endTouch);
+addEventListener("pointercancel", endTouch);
+addEventListener("blur", () => {
+  if (!held.size && !touchDirections.size) return;
+  held.clear();
+  touchDirections.clear();
+  touchGestures.clear();
+  sendAction();
+});
+gameRender.style.touchAction = "none";
+waiting.style.touchAction = "none";
+end.style.touchAction = "none";
 function isHeldReplayCommand(event) {
   return replay.active && event.repeat && REPLAY_KEYS.has(event.key.toLowerCase());
 }
