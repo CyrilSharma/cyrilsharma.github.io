@@ -6613,7 +6613,6 @@ var msg = document.getElementById("msg");
 var waiting = document.getElementById("waiting");
 var waitingPlayers = document.getElementById("waiting-players");
 var end = document.getElementById("end");
-end.style.backgroundColor = "rgba(21, 21, 21, .4)";
 var endLabel = document.getElementById("end-label");
 var endWinner = document.getElementById("end-winner");
 var endDetail = document.getElementById("end-detail");
@@ -6627,6 +6626,7 @@ var playerSearchInput = document.getElementById("player-search-input");
 var playerOptions = document.getElementById("player-options");
 var playerList = document.getElementById("player-list");
 var gameInfos = document.getElementById("game-infos");
+var gameArea = document.getElementById("col-right");
 var gameRender = document.getElementById("render");
 var decisionIntervalInput = document.getElementById("decision-interval");
 var targetGranularityInput = document.getElementById("target-granularity");
@@ -6772,13 +6772,9 @@ function resizeBitmap(context, size3, pixelRatio, preserve) {
   context.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
 }
 function resizeCanvases() {
-  const mobile = matchMedia("(max-width: 899px) and (pointer: coarse)").matches;
-  const availableWidth = mobile ? window.innerWidth * 0.82 : window.innerWidth - gameInfos.clientWidth - 8;
-  const availableHeight = mobile ? window.innerHeight * 0.65 : window.innerHeight - 8;
   const size3 = Math.max(1, Math.floor(Math.min(
-    availableWidth,
-    availableHeight,
-    600
+    window.innerWidth - gameInfos.clientWidth - 8,
+    window.innerHeight - 8
   )));
   const pixelRatio = window.devicePixelRatio || 1;
   gameRender.style.width = `${size3 + 8}px`;
@@ -7545,6 +7541,12 @@ addEventListener("blur", () => {
 gameRender.style.touchAction = "none";
 waiting.style.touchAction = "none";
 end.style.touchAction = "none";
+gameArea.style.userSelect = "none";
+gameArea.style.webkitUserSelect = "none";
+gameArea.style.webkitTouchCallout = "none";
+gameArea.addEventListener("contextmenu", (event) => {
+  if (event.pointerType === "touch" || matchMedia("(pointer: coarse)").matches) event.preventDefault();
+});
 function isHeldReplayCommand(event) {
   return replay.active && event.repeat && REPLAY_KEYS.has(event.key.toLowerCase());
 }
