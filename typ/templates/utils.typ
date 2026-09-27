@@ -323,5 +323,7 @@
 #let dz = $d z$
 #let dt = $d t$
 #let dw = $d w$
+#let ds = $d s$
+#let da = $d a$
 #let dA = $d A$
 #let dV = $d V$
