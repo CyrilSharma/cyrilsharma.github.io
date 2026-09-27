@@ -53,6 +53,7 @@ const currentPostId = allPosts.find((p) => {
 const rssUrl = new URL(`${BASE_PATH}/rss.xml`, Astro.site).href;
 
 const commandItems: PaletteItem[] = [
+  { label: "Curvytron", href: "https://cyrilsharma.github.io/curvytron-rl", group: "command" },
   { label: "Copy RSS URL", href: `clipboard:${rssUrl}`, group: "command" },
   ...(currentPostId ? allPosts.filter(p => p.id === currentPostId).map(p => ({
     label: "View Raw",

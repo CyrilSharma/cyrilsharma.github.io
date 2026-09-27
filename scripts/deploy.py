@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import argparse
 import os
 import shutil
 import subprocess
@@ -42,7 +43,7 @@ def ensure_live_branch(source_sha):
     return True
 
 
-def changed_article_files(source_sha):
+def changed_article_files(source_sha, paths=None):
     return output([
         "git",
         "diff",
@@ -50,7 +51,7 @@ def changed_article_files(source_sha):
         "--diff-filter=ACMRD",
         f"{LIVE_BRANCH}..{source_sha}",
         "--",
-        ARTICLE_DIR,
+        *(paths or [ARTICLE_DIR]),
     ]).splitlines()
 
 
@@ -61,7 +62,7 @@ def title_for(path):
     return name.replace("-", " ").replace("_", " ").title()
 
 
-def commit_selected_files(source_sha, selected):
+def commit_selected_files(source_sha, selected, message=None):
     tmp_parent = tempfile.mkdtemp(prefix="blog-deploy-")
     worktree = os.path.join(tmp_parent, "live")
     try:
@@ -76,13 +77,13 @@ def commit_selected_files(source_sha, selected):
             elif os.path.exists(target):
                 os.remove(target)
 
-        status = output(["git", "status", "--short", "--", ARTICLE_DIR], cwd=worktree)
+        status = output(["git", "status", "--short", "--", *selected], cwd=worktree)
         if not status:
             print("Selected files produced no deploy changes.")
             return False
 
         run(["git", "add", "--"] + selected, cwd=worktree)
-        msg = "Deploy: " + ", ".join(title_for(path) for path in selected)
+        msg = message or "Deploy: " + ", ".join(title_for(path) for path in selected)
         run(["git", "commit", "-m", msg], cwd=worktree)
         run(["git", "push", "origin", LIVE_BRANCH], cwd=worktree)
         return True
@@ -92,10 +93,15 @@ def commit_selected_files(source_sha, selected):
 
 
 def main():
+    parser = argparse.ArgumentParser(description="Deploy selected committed files to live.")
+    parser.add_argument("files", nargs="*", help="Paths to deploy; defaults to interactive article selection.")
+    parser.add_argument("-m", "--message", help="Deployment commit message.")
+    args = parser.parse_args()
+    paths = args.files or [ARTICLE_DIR]
     source_sha = output(["git", "rev-parse", "HEAD"])
-    uncommitted = output(["git", "status", "--short", "--", ARTICLE_DIR])
+    uncommitted = output(["git", "status", "--short", "--", *paths])
     if uncommitted:
-        print("Uncommitted article changes are not deployable. Run 'just push' first.")
+        print("Uncommitted changes are not deployable. Publish the selected files first.")
         print(uncommitted)
         sys.exit(1)
 
@@ -105,16 +111,16 @@ def main():
         print(f"Initialized and pushed '{LIVE_BRANCH}' from current HEAD.")
         return
 
-    files = changed_article_files(source_sha)
+    files = changed_article_files(source_sha, paths)
     if not files:
-        print(f"No committed article changes to deploy relative to '{LIVE_BRANCH}'.")
+        print(f"No committed changes to deploy in {', '.join(paths)} relative to '{LIVE_BRANCH}'.")
         sys.exit(0)
 
-    selected = questionary.checkbox("Select article files to deploy:", choices=files).ask()
+    selected = files if args.files else questionary.checkbox("Select article files to deploy:", choices=files).ask()
     if not selected:
         sys.exit(0)
 
-    if commit_selected_files(source_sha, selected):
+    if commit_selected_files(source_sha, selected, args.message):
         print(f"Deployed {len(selected)} file(s) to '{LIVE_BRANCH}'.")
 
 
