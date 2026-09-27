@@ -1036,23 +1036,23 @@ $
 
 So essentially, GMRES converges fast if the condition number is small, and if you can find a polynomial that makes all the eigenvalues small. Now, complex analysis tells us that for any holomorphic function, the value at its interior is equal to the average of values on a ring around it. Hence, if the eigenvalues form a ring around 0 (where the polynomial evaluates to 1), then the convergence rate is very slow. If they're tightly concentrated somewhere else, say at $z = z_0$, then it's easy to see a polynomial of the form $(z - z_0)^n$ reduces the error very quickly. The more spread out eigenvalues, the more unique roots you will need and the slower the overall convergence.
 
-== Bi-Orthogonalization Methods
-These methods solve the same problems as before, $A x = b$ and $A x = lambda x$. However, unlike the Arnoldi iteration, they don't construct a basis for $cal(K_n)$ that is orthonormal. Instead, they construct a basis that adheres to a 3-term recurrence.
-$
-  A v_i = alpha v_(i - 1) + beta v_i + gamma v_(i + 1)
-$
+// == Bi-Orthogonalization Methods
+// These methods solve the same problems as before, $A x = b$ and $A x = lambda x$. However, unlike the Arnoldi iteration, they don't construct a basis for $cal(K_n)$ that is orthonormal. Instead, they construct a basis that adheres to a 3-term recurrence.
+// $
+//   A v_i = alpha v_(i - 1) + beta v_i + gamma v_(i + 1)
+// $
 
-They construct two such bases and force them to be mutually orthogonal.
-$
-  V_n^* W_n = I \
-  A V_n = V_(n + 1) tilde(T_n) \
-  A^* W_n = W_(n + 1) tilde(W_n) \
-  W_n^* A V_n = T_n
-$
+// They construct two such bases and force them to be mutually orthogonal.
+// $
+//   V_n^* W_n = I \
+//   A V_n = V_(n + 1) tilde(T_n) \
+//   A^* W_n = W_(n + 1) tilde(W_n) \
+//   W_n^* A V_n = T_n
+// $
 
-This is very analogous to previous methods. You can use the eigenvalues of $T_n$ to estimate the eigenvalues of $A$. You can choose $w_i$ or $v_i$ to be the closest vector to $b$ in the current Krylov subspace (residual minimization), etc.
+// This is very analogous to previous methods. You can use the eigenvalues of $T_n$ to estimate the eigenvalues of $A$. You can choose $w_i$ or $v_i$ to be the closest vector to $b$ in the current Krylov subspace (residual minimization), etc.
 
-The main advantage of these methods is they need only a 3-term recurrence, while the main disadvantage is their stability guarantees aren't as good ($V_n$ and $W_n$ need not be well-conditioned).
+// The main advantage of these methods is they need only a 3-term recurrence, while the main disadvantage is their stability guarantees aren't as good ($V_n$ and $W_n$ need not be well-conditioned).
 
 = Applications
 // == Inequalities
@@ -1210,6 +1210,67 @@ $
 
 By Cauchy-Schwarz, choosing $Q^* = [U_1^*; ...; U_r^*]$ is optimal.
 
+== Lanczos Quadrature
+Lanczos Quadrature asks, how can we estimate $b^top f(A) b$, for symmetric $A$, efficiently?
 
+The first step is to transform the problem, using a powerful tool for symmetric matrices, the eigen decomposition. 
+$
+  A = V D V^top \
+  f(A) = V f(D) V^top \
+  b^top f(A) b = b^top V f(D) V^top b = sum (V^top b)_i^2 f(lambda_i) 
+$
 
-*TODO*: Producing samples with a given Covariance. Discretizing differential equations
+So you can see the desired quantity is a _quadrature_: a linear mixture of function evaluations.
+
+// We can always take $norm(b) = 1$ and then rescale later, in which case the quadrature weights always sum to 1, yielding a nice interpretation as a probability distribution.
+
+Now here's another way to get at the same quantity. Start by running $k$ iterations of Lanczos (Arnoldi's symmetric special case).
+$
+  T_k = Q_k^top A Q_k\
+  T_k = S_k^top Theta S_k
+$
+
+$T_k$ is a tridiagonal $k times k$ matrix. We can perform Lanczos in such a way that $Q_1 = b$, and then we'll have...
+$
+  e_1^top f(T_k) e_1 approx_1 e_1^top Q^top f(A) Q e_1 = b_1^top f(A) b_1
+$
+
+(1) holds exactly if $f$ is polynomial, and if $f$ has degree less than $2k - 1$. Why is this true? Well, I claim
+$
+  e_1^top T_k^c e_1 = b^top A^c b quad forall c <= 2k - 1
+$
+
+Which is sufficient to show the claim. To prove this, recall $T_k$ can be interpreted as an operator which takes a vector specified in the Krylov basis, applies $A$, then projects back onto the Krylov basis. Now, since the Krylov basis consists of ${b, A b, ..., A^(k - 1) b}$, we are guaranteed this "project back" operation does nothing for the first $k$ applications. Thus we have...
+$
+  Q_k T_k^c e_1 = A^c b \ 
+  r + s + 1 = c quad r, s <= k - 1 \
+  b^top A^c b = (b^top A^r)A(A^s b) = (Q_k T_k^r e_1)^top A (Q_k T_k^s e_1) = \
+  e_1^top T_k^r Q_k^top A Q_k T_k^s e_1  = e_1^top T_k^r T_k T_k^s e_1 = e_1 T_k^c e_1
+$
+
+And for $c = 0$, the claim holds vacuously. Hence, the theorem is shown.
+
+Using the theorem, we have
+$
+  b^top f(A) b approx e_1^top f(T) e_1 = e_1^top S^top f(D) S e_1 = sum s_(0 i)^2 f(theta_i)
+$
+
+So using Lanczos iterations, we arrive at another quadrature rule. Importantly, the Lanczos rule is _exact_ under the conditions I outlined, and much faster then computing this quantity the naive way (e.g. with a full spectral decomposition of A). Even when those conditions don't hold, $f$ can often be approximated with a low-degree polynomial very well, making this approximation very tight.
+
+Anyway, what can you use this thing for? A common use-case is to quickly mine the distribution of eigenvalues. The thinking goes like this. Suppose you have 
+$
+  z | EE [z z^top] = I
+$
+
+Then, 
+$
+  EE [z^top f(A) z] = EE [z^top V^top f(D) V z] = EE [z^top (sum f(lambda_i) v_i v_i^top) z] =
+  EE [sum f(lambda_i) z^top v_i v_i^top z] = \
+   EE [sum f(lambda_i) v_i^top z z^top v_i] = EE [sum f(lambda_i) v_i^top v_i ] = EE [sum Tr(f(lambda_i) v_i v_i^top)] =Tr(f(A))
+$
+
+So using the Quadrature trick, you can quickly arrive at the correct expected trace. Now, what do you chose for $f$? You chose something like $f(x) = I(x > lambda)$. That, is an indicator function of if $x$ is greater than some threshold. Of course, this can't be approximated by a polynomial that well, so you might choose a smoothed version of the indicator instead. Anyways, the trace now has a semantic interpretation: it is the number of eigenvalues above a given threshold. Bash a bunch of thresholds, and you've obtained an empirical CDF of eigenvalues!
+
+This is pretty useful if you want to understand the distribution of eigenvalues for huge matrices (think LLMs) where paying $n^3$ is simply not feasible.
+
+// *TODO*: Producing samples with a given Covariance. Discretizing differential equations

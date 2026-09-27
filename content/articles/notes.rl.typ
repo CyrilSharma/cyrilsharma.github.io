@@ -205,4 +205,5 @@ It's worth noting you can also eliminate the drift with pure importance sampling
 // = Appendix
 // + Add Performance Difference Lemma (its actually chill, use
 // + Just use a telescoping difference of values anchored at init
-// 
+// + Probably mention rewards-to-go
+// + I think our definitions are a bit wrong as is.
