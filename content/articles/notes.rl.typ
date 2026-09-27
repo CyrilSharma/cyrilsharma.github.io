@@ -160,7 +160,12 @@ $
   EE_(a ~ pi_"old" (s_t)) pi(a | s_t)/(pi_"old" (a | s_t)) Q_(pi_"old")(s_t, a)
 $
 
-Another drawback with this approach is importance sampling ratio can introduce a ton of variance. This motivates trying not to change the policy much to reduce variance. TRPO solves this with a KL-penalty, PPO and GRPO solve this by clipping the importance sampling ratio to be within $(1 - epsilon, 1 + epsilon)$.
+Now our overall objective looks like
+$
+   max EE_(s ~ pi_"old") sum EE_(a ~ pi_"old" (s_t)) pi(a | s_t)/(pi_"old" (a | s_t)) Q_(pi_"old")(s_t, a)
+$
+
+And you can see there's another problem, which is that we're still maximizing $J(t)$ under the _old_ state distribution, instead of the new one. This is a much trickier problem to correct as we cannot evaluate the corresponding importance sampling correction What is often done, is to assume the state distribution IS ratio is roughly 1, and "enforce" this by adding penalties to keep the state distributions close together. TRPO uses a KL constraint, PPO and GRPO solve this by clipping the importance sampling ratio to be within $(1 - epsilon, 1 + epsilon)$.
 
 One final trick is to estimate the expectation with only the single action we _did_ take. This is unbiased, a bit more noisy, but crucially doesn't force us to estimate $Q$-values for actions never taken. 
 
@@ -198,5 +203,6 @@ Luckily, correcting for this is relatively easy! Simply compute the drift term a
 It's worth noting you can also eliminate the drift with pure importance sampling, but this requires _not clipping_ the importance sampling ratio if you don't want to introduce bias. The appeal of score matching is it is an additive correction (so you can always apply it exactly, no need for clipping), and even if you stack clipped importance sampling on top of it, _you are still guaranteed to have eliminated drift_.
 
 // = Appendix
-// + In practice, you'll see a bunch of $gamma$s floating around, that's because some games don't have bounded time horizons or perhaps just really long time horizons, and you want to bias the model towards maximizing rewards over shorter time horizons. This doesn't really change the substance of the algorithms.
-// + You'll also see "Temporal Difference" learning almong with a bunch of $lambda$ parameters floating around. Fundamentally those are doing a similar "self-consistency" loss as $norm(V(s_t) - V(s_(t+1)) + r)^2$ but over some more steps and with a special weighting. It's a variance-reduction trick.
+// + Add Performance Difference Lemma (its actually chill, use
+// + Just use a telescoping difference of values anchored at init
+// 
