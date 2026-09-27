@@ -40,7 +40,7 @@
   $
     "dot"(a_1 u_1, a_2 u_2 + ... + a_n u_n) = \
     a_1 a_2 "dot"(u_1, u_2) + ... + a_1 a_n "dot"(u_1, u_n) = 0 \
-    "dot"(a_1 u_1, a_2 u_2 + ... + a_n u_n) = "dot"(a_1 u_1, -a_1 u_1) = -a_1 "dot"(u_1, u_1) < 0
+    "dot"(a_1 u_1, a_2 u_2 + ... + a_n u_n) = "dot"(a_1 u_1, -a_1 u_1) = -a_1^2 "dot"(u_1, u_1) < 0
   $
 
   Hence, we've arrived at a contradiction, and our basis must be linearly independent.
@@ -97,7 +97,7 @@ This has some interesting implications, like $"rank"(A) = "rank"(A^top)$.
 #theorem[$
   A in bb(R)^(n times m) \
   "Col"(A) perp "Null"(A^top), "Row"(A) perp "Null"(A) \
-  "Col"(A) union "Null"(A^top) = RR^m, "Row"(A) union "Null"(A) = RR^n \ 
+  "Col"(A) plus.o "Null"(A^top) = RR^m, "Row"(A) plus.o "Null"(A) = RR^n \ 
 $]
 #proof[
   Suppose we have $v in "Col"(A), w in "Null"(A^top)$.
