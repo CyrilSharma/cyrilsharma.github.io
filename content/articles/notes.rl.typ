@@ -2,7 +2,7 @@
 #show: main.with(
   title: "RL",
   desc: "",
-  date: "2026-07-07T23:11:34-04:00",
+  date: "2026-09-27T11:01:07-04:00",
   tags: ("ml",),
 )
 #show: note_page
