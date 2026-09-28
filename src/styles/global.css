@@ -469,29 +469,65 @@ sup a:hover {
   }
 
   .prose nav[role="doc-toc"] h2 {
-    font-size: 2.0rem;
+    flex-shrink: 0;
+    margin: 0;
+    padding: 1rem 0 0.25rem 1.5rem;
+    color: color-mix(in srgb, var(--main-color) 50%, var(--main-bg-color));
+    font-size: 34px;
     font-weight: 700;
     letter-spacing: 0.08em;
-    opacity: 0.5;
-    margin-left: 1.5rem;
   }
 
   .prose nav[role="doc-toc"] ol {
+    display: block;
     text-align: left;
+    padding-left: 0;
+  }
+
+  .prose nav[role="doc-toc"] > ol {
+    margin-left: 1.5rem;
+    min-height: 0;
+    overflow-y: auto;
+  }
+
+  .prose nav[role="doc-toc"] > ol > li {
+    font-size: 22px;
+    font-weight: 600;
+  }
+
+  .prose nav[role="doc-toc"] > ol > li > ol {
+    margin-left: 26px;
+  }
+
+  .prose nav[role="doc-toc"] > ol > li > ol > li {
+    font-size: 20px;
+    font-weight: 400;
+  }
+
+  .prose nav[role="doc-toc"] a {
+    color: #718da0;
+    font-size: inherit;
+    font-weight: inherit;
+  }
+
+  :root[data-theme="dark"] .prose nav[role="doc-toc"] a {
+    color: #9bb1bf;
   }
 
   .prose > div:has(> nav[role="doc-toc"]) > nav[role="doc-toc"],
   .prose:has(> nav[role="doc-toc"]) > nav[role="doc-toc"] {
+    display: flex;
+    flex-direction: column;
     grid-column: 1;
     grid-row: 1 / 9999;
     align-self: start;
     position: sticky;
     top: 1rem;
-    width: calc(50vw - 430px - 1.5rem);
+    width: min(320px, calc(50vw - 430px - 1.5rem));
     margin-left: calc(430px - 50vw);
     margin-bottom: 0;
     max-height: calc(100vh - 4rem);
-    overflow-y: auto;
+    overflow: hidden;
   }
 
   .prose > div:has(> nav[role="doc-toc"]) > *:not(nav[role="doc-toc"]),
