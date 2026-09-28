@@ -1266,7 +1266,7 @@ Then,
 $
   EE [z^top f(A) z] = EE [z^top V^top f(D) V z] = EE [z^top (sum f(lambda_i) v_i v_i^top) z] =
   EE [sum f(lambda_i) z^top v_i v_i^top z] = \
-   EE [sum f(lambda_i) v_i^top z z^top v_i] = EE [sum f(lambda_i) v_i^top v_i ] = EE [sum Tr(f(lambda_i) v_i v_i^top)] =Tr(f(A))
+   EE [sum f(lambda_i) v_i^top z z^top v_i] = sum f(lambda_i) v_i^top v_i = sum Tr(f(lambda_i) v_i v_i^top) =Tr(f(A))
 $
 
 So using the Quadrature trick, you can quickly arrive at the correct expected trace. Now, what do you chose for $f$? You chose something like $f(x) = I(x > lambda)$. That, is an indicator function of if $x$ is greater than some threshold. Of course, this can't be approximated by a polynomial that well, so you might choose a smoothed version of the indicator instead. Anyways, the trace now has a semantic interpretation: it is the number of eigenvalues above a given threshold. Bash a bunch of thresholds, and you've obtained an empirical CDF of eigenvalues!
