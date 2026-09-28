@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import argparse
 import os
 import shutil
 import subprocess
@@ -12,7 +13,10 @@ LIVE_BRANCH = "live"
 
 
 def run(cmd, *, cwd=None, check=True):
-    return subprocess.run(cmd, cwd=cwd, check=check, capture_output=True, text=True)
+    result = subprocess.run(cmd, cwd=cwd, capture_output=True, text=True)
+    if check and result.returncode != 0:
+        raise RuntimeError(result.stderr.strip() or result.stdout.strip() or f"Command failed: {' '.join(cmd)}")
+    return result
 
 
 def output(cmd, *, cwd=None, check=True):
@@ -24,12 +28,20 @@ def ref_exists(ref):
 
 
 def ensure_live_branch(source_sha):
-    if ref_exists(LIVE_BRANCH):
+    fetched = run(["git", "fetch", "origin", LIVE_BRANCH], check=False)
+    if fetched.returncode == 0:
+        remote_ref = f"origin/{LIVE_BRANCH}"
+        if ref_exists(LIVE_BRANCH):
+            if ref_exists(remote_ref) and output(["git", "rev-parse", LIVE_BRANCH]) != output(["git", "rev-parse", remote_ref]):
+                if run(["git", "merge-base", "--is-ancestor", LIVE_BRANCH, remote_ref], check=False).returncode != 0:
+                    raise RuntimeError(f"Local '{LIVE_BRANCH}' has commits not on '{remote_ref}'; reconcile the branches before deploying.")
+                run(["git", "branch", "-f", LIVE_BRANCH, remote_ref])
+        else:
+            run(["git", "branch", LIVE_BRANCH, remote_ref])
         return False
 
-    fetched = run(["git", "fetch", "origin", f"{LIVE_BRANCH}:{LIVE_BRANCH}"], check=False)
-    if fetched.returncode == 0 and ref_exists(LIVE_BRANCH):
-        return False
+    if ref_exists(LIVE_BRANCH):
+        raise RuntimeError(f"Could not fetch '{LIVE_BRANCH}' from origin: {fetched.stderr.strip()}")
 
     init = questionary.confirm(
         f"No local or remote '{LIVE_BRANCH}' branch found. Initialize it from current HEAD?",
@@ -42,7 +54,7 @@ def ensure_live_branch(source_sha):
     return True
 
 
-def changed_article_files(source_sha):
+def changed_article_files(source_sha, paths=None):
     return output([
         "git",
         "diff",
@@ -50,8 +62,37 @@ def changed_article_files(source_sha):
         "--diff-filter=ACMRD",
         f"{LIVE_BRANCH}..{source_sha}",
         "--",
-        ARTICLE_DIR,
+        *(paths or [ARTICLE_DIR]),
     ]).splitlines()
+
+
+def changed_non_article_files(source_sha):
+    previous_deploy = output([
+        "git", "log", "-1", "--grep=^Deploy-Source: ", "--format=%B", LIVE_BRANCH,
+    ])
+    source_lines = [line.removeprefix("Deploy-Source: ") for line in previous_deploy.splitlines()
+                    if line.startswith("Deploy-Source: ")]
+    base_sha = source_lines[-1] if source_lines else output(["git", "merge-base", LIVE_BRANCH, source_sha])
+    if run(["git", "merge-base", "--is-ancestor", base_sha, source_sha], check=False).returncode != 0:
+        raise RuntimeError("The last deployed source commit is not in the current branch; reconcile it before deploying.")
+    changed_on_source = output([
+        "git", "diff", "--name-only", "--no-renames", f"{base_sha}..{source_sha}",
+        "--", ".", f":(exclude){ARTICLE_DIR}/**",
+    ]).splitlines()
+    if not changed_on_source:
+        return []
+
+    return output([
+        "git", "diff", "--name-only", "--no-renames", f"{LIVE_BRANCH}..{source_sha}",
+        "--", *changed_on_source,
+    ]).splitlines()
+
+
+def uncommitted_non_article_files():
+    paths = [".", f":(exclude){ARTICLE_DIR}/**"]
+    tracked = output(["git", "diff", "--name-only", "--no-renames", "HEAD", "--", *paths]).splitlines()
+    untracked = output(["git", "ls-files", "--others", "--exclude-standard", "--", *paths]).splitlines()
+    return list(dict.fromkeys(tracked + untracked))
 
 
 def title_for(path):
@@ -61,7 +102,7 @@ def title_for(path):
     return name.replace("-", " ").replace("_", " ").title()
 
 
-def commit_selected_files(source_sha, selected):
+def commit_selected_files(source_sha, selected, message=None, record_source=False):
     tmp_parent = tempfile.mkdtemp(prefix="blog-deploy-")
     worktree = os.path.join(tmp_parent, "live")
     try:
@@ -76,13 +117,15 @@ def commit_selected_files(source_sha, selected):
             elif os.path.exists(target):
                 os.remove(target)
 
-        status = output(["git", "status", "--short", "--", ARTICLE_DIR], cwd=worktree)
+        status = output(["git", "status", "--short", "--", *selected], cwd=worktree)
         if not status:
             print("Selected files produced no deploy changes.")
             return False
 
         run(["git", "add", "--"] + selected, cwd=worktree)
-        msg = "Deploy: " + ", ".join(title_for(path) for path in selected)
+        msg = message or "Deploy: " + ", ".join(title_for(path) for path in selected)
+        if record_source:
+            msg += f"\n\nDeploy-Source: {source_sha}"
         run(["git", "commit", "-m", msg], cwd=worktree)
         run(["git", "push", "origin", LIVE_BRANCH], cwd=worktree)
         return True
@@ -92,29 +135,58 @@ def commit_selected_files(source_sha, selected):
 
 
 def main():
-    source_sha = output(["git", "rev-parse", "HEAD"])
-    uncommitted = output(["git", "status", "--short", "--", ARTICLE_DIR])
+    parser = argparse.ArgumentParser(description="Publish non-article changes to main and live, then optionally deploy articles.")
+    parser.add_argument("files", nargs="*", help="Deploy only these committed paths; by default, publish all non-article changes and prompt for articles.")
+    parser.add_argument("-m", "--message", help="Deployment commit message.")
+    args = parser.parse_args()
+    paths = args.files or [ARTICLE_DIR]
+    uncommitted = output(["git", "status", "--short", "--", *paths])
     if uncommitted:
-        print("Uncommitted article changes are not deployable. Run 'just push' first.")
+        print("Uncommitted changes are not deployable. Publish the selected files first.")
         print(uncommitted)
         sys.exit(1)
 
+    if not args.files:
+        if output(["git", "branch", "--show-current"]) != "main":
+            raise RuntimeError("Run 'just deploy' from the main branch to publish non-article changes.")
+        working_files = uncommitted_non_article_files()
+        if working_files:
+            run(["git", "add", "--", *working_files])
+            run(["git", "commit", "--only", "-m", "Publish: Site updates", "--", *working_files])
+            print(f"Committed {len(working_files)} non-article file(s) to 'main'.")
+        run(["git", "push", "origin", "main"])
+
+    source_sha = output(["git", "rev-parse", "HEAD"])
     initialized = ensure_live_branch(source_sha)
     if initialized:
         run(["git", "push", "origin", LIVE_BRANCH])
         print(f"Initialized and pushed '{LIVE_BRANCH}' from current HEAD.")
         return
 
-    files = changed_article_files(source_sha)
-    if not files:
-        print(f"No committed article changes to deploy relative to '{LIVE_BRANCH}'.")
-        sys.exit(0)
-
-    selected = questionary.checkbox("Select article files to deploy:", choices=files).ask()
+    if args.files:
+        selected = changed_article_files(source_sha, paths)
+    else:
+        site_files = changed_non_article_files(source_sha)
+        article_files = changed_article_files(source_sha)
+        selected_articles = (
+            questionary.checkbox("Select article files to deploy:", choices=article_files).ask()
+            if article_files else []
+        ) or []
+        selected = site_files + selected_articles
+        if site_files:
+            print(f"Including {len(site_files)} non-article file(s):")
+            print("\n".join(site_files))
     if not selected:
-        sys.exit(0)
+        print(f"No changes selected for deployment to '{LIVE_BRANCH}'.")
+        return
 
-    if commit_selected_files(source_sha, selected):
+    message = args.message
+    if message is None and not args.files and site_files:
+        message = "Deploy: Site updates"
+        if selected_articles:
+            message += ", " + ", ".join(title_for(path) for path in selected_articles)
+
+    if commit_selected_files(source_sha, selected, message, record_source=not args.files):
         print(f"Deployed {len(selected)} file(s) to '{LIVE_BRANCH}'.")
 
 

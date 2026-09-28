@@ -261,20 +261,25 @@
   set text(fill: rgb("dfdfd6")) if is-dark-theme
 
   /// HTML code block supported by zebraw.
-  show: if is-dark-theme {
-    zebraw-init.with(
-      // should vary by theme
-      background-color: if code-extra-colors.bg != none {
-        (code-extra-colors.bg, code-extra-colors.bg)
-      },
-      highlight-color: rgb("#3d59a1"),
-      comment-color: rgb("#394b70"),
-      lang-color: rgb("#3d59a1"),
-      lang: false,
-      numbering: false,
-    )
+  show: body => context if shiroa-sys-target() == "html" {
+    let init = if is-dark-theme {
+      zebraw-init.with(
+        // should vary by theme
+        background-color: if code-extra-colors.bg != none {
+          (code-extra-colors.bg, code-extra-colors.bg)
+        },
+        highlight-color: rgb("#3d59a1"),
+        comment-color: rgb("#394b70"),
+        lang-color: rgb("#3d59a1"),
+        lang: false,
+        numbering: false,
+      )
+    } else {
+      zebraw-init.with(lang: false, numbering: false)
+    }
+    init(body)
   } else {
-    zebraw-init.with(lang: false, numbering: false)
+    body
   }
 
   // code block setting
@@ -318,5 +323,7 @@
 #let dz = $d z$
 #let dt = $d t$
 #let dw = $d w$
+#let ds = $d s$
+#let da = $d a$
 #let dA = $d A$
 #let dV = $d V$
