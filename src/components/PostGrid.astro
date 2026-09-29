@@ -1,6 +1,5 @@
 ---
 import "../styles/post-grid.css";
-import { formatDate } from "../utils";
 
 interface Post {
   id: string;
@@ -25,7 +24,6 @@ const { posts, basePath } = Astro.props;
       <article class="pg-card">
         <a class="pg-card-link" href={`${basePath}/${post.slug}/`} aria-label={post.title}></a>
         <h2 class="pg-title">{post.title}</h2>
-        <div class="date">{formatDate(post.date)}</div>
         {post.preview && <div class="pg-frame-wrapper" set:html={post.preview} />}
       </article>
     ))}
