@@ -21,6 +21,29 @@ export default defineConfig({
   base: BASE_PATH || "/",
 
   integrations: [
+    {
+      name: "preload-justification",
+      hooks: {
+        "astro:build:done": ({ dir }) => {
+          // Astro bundles scripts, but custom script attributes bypass bundling.
+          // Add render blocking and preload hints to the bundled output instead.
+          const output = new URL(dir);
+          const assets = fs.readdirSync(new URL("_astro/", output));
+          const justification = assets.find(name => /^justified-prose\..*\.js$/.test(name));
+          for (const entry of fs.readdirSync(output, { recursive: true })) {
+            if (!entry.endsWith(".html")) continue;
+            const file = new URL(entry, output);
+            const html = fs.readFileSync(file, "utf8");
+            const script = html.match(/<script type="module" src="([^"]*\/(?:BlogPost|PostListPage)\.astro_astro_type_script_index_0_lang\.[^"]+\.js)"><\/script>/);
+            if (!script) continue;
+            const src = script[1];
+            const shared = justification ? `${BASE_PATH}/_astro/${justification}` : null;
+            const head = `<link rel="modulepreload" href="${src}">${shared ? `<link rel="modulepreload" href="${shared}">` : ""}<script type="module" blocking="render" src="${src}"></script>`;
+            fs.writeFileSync(file, html.replace(script[0], "").replace("</head>", `${head}</head>`));
+          }
+        },
+      },
+    },
     sitemap({ customPages: rawPages }),
     icon({
       include: ["mdi"],

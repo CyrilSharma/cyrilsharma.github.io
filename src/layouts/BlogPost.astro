@@ -40,6 +40,7 @@ const { title, desc, date, updatedDate, tags } = Astro.props;
       </article>
     </main>
   <script>
+    import { enhanceJustification, resetJustification } from "../justified-prose";
     if (import.meta.hot) {
       function wrapInlineEquations() {
         document.querySelectorAll('.inline-equation').forEach(el => {
@@ -59,6 +60,7 @@ const { title, desc, date, updatedDate, tags } = Astro.props;
       import.meta.hot.on("typst-update", ({ content, scrollIndex }: { content: string, scrollIndex: number }) => {
         const prose = document.querySelector(".prose");
         if (!prose) return;
+        resetJustification();
         prose.innerHTML = content;
         if (scrollIndex >= 0) {
           const target = [...prose.children]
@@ -69,9 +71,10 @@ const { title, desc, date, updatedDate, tags } = Astro.props;
           );
         }
         wrapInlineEquations();
+        enhanceJustification();
       });
     }
+    await enhanceJustification();
   </script>
   </body>
 </html>
-

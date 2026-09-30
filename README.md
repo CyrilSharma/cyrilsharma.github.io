@@ -75,6 +75,23 @@ Renderable files use the blog template:
 - `src/consts.ts,src/components/BaseHead.astro`: global metadata and the head component.
 - `src/styles/*`: CSS styles.
 
+### Paragraph justification
+
+Justif enhances justified article paragraphs and simple list items on desktop.
+Native CSS remains the fallback for unsupported content and when JavaScript is
+disabled; narrow screens keep their existing layout. The integration lives in
+`src/justified-prose.ts` and also runs after Typst live updates.
+Production pages preload the bundled, self-hosted JavaScript from the head and
+use `blocking="render"`, waiting for the font layout before completing startup.
+This trades a slightly later first paint for less text movement in browsers
+that support render-blocking scripts; other browsers still benefit from preloading.
+
+For a local visual comparison, open `/blog/too-much-of-a-good-thing/` at the same
+browser width as the live site. Add `?justif=off` to disable the enhancement in
+development only. In Safari at the full desktop article width, the native opening
+paragraph has four lines and splits “Currently” across the first two lines;
+Justif uses three more evenly spaced lines and keeps the word whole.
+
 ## Credit
 
 - This theme is based off of the lovely [Bear Blog.](https://github.com/HermanMartinus/bearblog/)

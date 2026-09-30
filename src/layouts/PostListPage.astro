@@ -60,4 +60,8 @@ const postBasePath = `${BASE_PATH}/${SECTION_URL[section ?? ""] ?? section ?? ""
       <PostGrid posts={posts} basePath={postBasePath} />
     </main>
   </body>
+  <script>
+    import { enhanceJustification } from "../justified-prose";
+    await enhanceJustification();
+  </script>
 </html>
