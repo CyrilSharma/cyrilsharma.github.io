@@ -459,6 +459,23 @@ sup a:hover {
   font-size: 1.2rem;
 }
 
+.prose nav[role="doc-toc"] {
+  text-align: left;
+  hyphens: none;
+}
+
+.prose nav[role="doc-toc"] a:has(> .prefix) {
+  display: flex;
+  column-gap: 0.25em;
+  text-align: left;
+  hyphens: none;
+}
+
+.prose nav[role="doc-toc"] a > .prefix {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
 @media (min-width: 1360px) {
   /* Nav sits in a 0-width column and overflows left into the existing margin.
      main stays 860px so the title and content don't move. */
