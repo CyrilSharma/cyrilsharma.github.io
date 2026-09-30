@@ -503,8 +503,10 @@ sup a:hover {
 
   .prose nav[role="doc-toc"] > ol {
     margin-left: 1.5rem;
+    padding-right: 0.75rem;
     min-height: 0;
     overflow-y: auto;
+    scrollbar-gutter: stable;
   }
 
   .prose nav[role="doc-toc"] > ol > li {
