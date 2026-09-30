@@ -12,14 +12,18 @@ export function resetJustification() {
 export function enhanceJustification() {
   resetJustification();
   // A local comparison switch; production always uses the enhancement.
-  if (import.meta.env.DEV && new URLSearchParams(location.search).get("justif") === "off") return;
-  if (!desktop.matches) return;
+  if (!desktop.matches || (import.meta.env.DEV && new URLSearchParams(location.search).get("justif") === "off")) {
+    document.documentElement.removeAttribute("data-justif-pending");
+    return;
+  }
   const paragraphs = [...document.querySelectorAll(".prose p, .prose li")]
     .filter((element) => !element.closest('nav, pre, [role="doc-toc"]'))
     .filter((element) => !element.querySelector("p, ul, ol"))
     .filter((element) => getComputedStyle(element).textAlign === "justify");
   controller = justify(paragraphs, { hyphenate: hyphenateEnUS });
-  return controller.ready;
+  return controller.ready.finally(() => {
+    document.documentElement.removeAttribute("data-justif-pending");
+  });
 }
 
 desktop.addEventListener("change", enhanceJustification);
