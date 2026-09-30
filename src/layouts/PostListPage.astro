@@ -1,6 +1,7 @@
 ---
 import BaseHead from "$components/BaseHead.astro";
 import SiteHeader from "$components/SiteHeader.astro";
+import JustificationLoading from "$components/JustificationLoading.astro";
 import PostGrid from "$components/PostGrid.astro";
 import { SITE_TITLE, SITE_DESCRIPTION, BASE_PATH } from "$consts";
 import { getPostList, SECTION_URL } from "../utils";
@@ -30,6 +31,7 @@ const postBasePath = `${BASE_PATH}/${SECTION_URL[section ?? ""] ?? section ?? ""
 <html lang="en">
   <head>
     <BaseHead title={heading} description={description} />
+    <JustificationLoading />
     <Fragment set:html={sharedStyles} />
     <style>
       main {

@@ -85,6 +85,9 @@ Production pages preload the bundled, self-hosted JavaScript from the head and
 use `blocking="render"`, waiting for the font layout before completing startup.
 This trades a slightly later first paint for less text movement in browsers
 that support render-blocking scripts; other browsers still benefit from preloading.
+Desktop pages also wait to reveal the main content until the initial font layout
+finishes, including in development. A two-second fallback reveals native content
+if the bundle fails to load; pages without JavaScript are visible immediately.
 
 For a local visual comparison, open `/blog/too-much-of-a-good-thing/` at the same
 browser width as the live site. Add `?justif=off` to disable the enhancement in

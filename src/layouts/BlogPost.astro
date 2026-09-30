@@ -3,6 +3,7 @@ import { type CollectionEntry } from "astro:content";
 import ArticleHeader from "$components/ArticleHeader.astro";
 import BaseHead from "$components/BaseHead.astro";
 import SiteHeader from "$components/SiteHeader.astro";
+import JustificationLoading from "$components/JustificationLoading.astro";
 
 type Props = CollectionEntry<"blog">["data"];
 const { title, desc, date, updatedDate, tags } = Astro.props;
@@ -13,6 +14,7 @@ const { title, desc, date, updatedDate, tags } = Astro.props;
   <head>
     <meta charset="utf-8" />
     <BaseHead title={title} description={desc} />
+    <JustificationLoading />
     <style>
       .prose {
         width: 100%;

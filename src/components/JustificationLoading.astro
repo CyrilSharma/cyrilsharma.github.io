@@ -1,0 +1,21 @@
+---
+import { BASE_PATH } from "$consts";
+---
+
+{import.meta.env.DEV && <link rel="modulepreload" href={`${BASE_PATH}/src/justified-prose.ts`} />}
+<style is:global>
+  html[data-justif-pending] main {
+    visibility: hidden;
+  }
+</style>
+<script is:inline>
+  // Keep the first visible layout stable, including in development and in
+  // browsers that do not support blocking="render". No-JS pages stay visible.
+  if (window.matchMedia("(min-width: 641px)").matches) {
+    document.documentElement.setAttribute("data-justif-pending", "");
+    // Restore the native page if JavaScript fails or the bundle is unavailable.
+    window.setTimeout(() => {
+      document.documentElement.removeAttribute("data-justif-pending");
+    }, 2000);
+  }
+</script>
