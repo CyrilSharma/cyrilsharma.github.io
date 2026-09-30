@@ -19,6 +19,7 @@ export function enhanceJustification() {
     .filter((element) => !element.querySelector("p, ul, ol"))
     .filter((element) => getComputedStyle(element).textAlign === "justify");
   controller = justify(paragraphs, { hyphenate: hyphenateEnUS });
+  return controller.ready;
 }
 
 desktop.addEventListener("change", enhanceJustification);

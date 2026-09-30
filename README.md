@@ -81,6 +81,10 @@ Justif enhances justified article paragraphs and simple list items on desktop.
 Native CSS remains the fallback for unsupported content and when JavaScript is
 disabled; narrow screens keep their existing layout. The integration lives in
 `src/justified-prose.ts` and also runs after Typst live updates.
+Production pages preload the bundled, self-hosted JavaScript from the head and
+use `blocking="render"`, waiting for the font layout before completing startup.
+This trades a slightly later first paint for less text movement in browsers
+that support render-blocking scripts; other browsers still benefit from preloading.
 
 For a local visual comparison, open `/blog/too-much-of-a-good-thing/` at the same
 browser width as the live site. Add `?justif=off` to disable the enhancement in
