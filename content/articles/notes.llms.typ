@@ -97,10 +97,9 @@ To each unique _token_ we'll associate a random, learnable, vector, called the t
 Let $X$ be a sequence of length $T$. Attention is defined as follows.
 $
   Q = "RoPE"(X W_Q) quad K = "RoPE"(X W_K) quad V = X W_V \
-  O = "softmax"_"rowwise" ("mask"(Q K^top)/"normalization") V
+  O = "softmax"_"rowwise" ((Q K^top + L)/"normalization") V
 $
-
-You can think of this as a clever linearly mixing $X$ across its time dimension, plus a projection.
+$L$ is typically a $T times T$ matrix with $-infinity$ on entries for whom you want to zero the softmax output, and $0$ everywhere else. You can think of Attention as a clever linearly mixing $X$ across its time dimension, plus a projection.
 $
   O = W_"attention" X W_"V"
 $
@@ -174,6 +173,84 @@ $
 $
 
 Anyway, this is essentially the algorithm. The full algorithm also accounts for the mask, normalization constant, and does a few tricks to ensure everything remains near the highest precision parts of the floating point representation, but these are relatively small extensions to the above algorithm.
+
+=== Backward
+I'll slightly rephrase the defintion to make the proof slicker.
+$
+  Q = X W_Q quad K = X W_K quad V = X W_V \
+  tilde(Q) = "RoPE"(Q) quad tilde(V) = "RoPE"(V) \
+  S = (tilde(Q) tilde(K)^top + L)/"normalization" \
+  A = "softmax"_"rowwise" (S)  quad O = A V
+$
+Now assume we know $d L slash d O$. We immediately have
+$
+  (d L)/(d A) = (d L)/(d O)V^top quad  (d L)/(d V) = A^top (d L)/(d O) \
+  (d L)/(d W_v) = X^top (d L)/(d V) quad (d L)/(d W_k) = X^top (d L)/(d K) quad (d L)/(d W_q) = X^top (d L)/(d Q) \
+  (d L)/(d X) = (d L)/(d V) W_V^top + (d L)/(d Q) W_Q^top + (d L)/(d K) W_K^top
+$
+
+We now need to differentiate through rowwise softmax.
+$
+  "softmax"(x)_i = exp(x_i) / (sum exp(x_i)) quad log("softmax"(x))_i = x_i - log(sum exp(x_i)) \
+  d/dx_j log("softmax"(x)_i) = (d/dx_j "softmax"(x)_i)/"softmax"(x)_i =  I[i = j] - (exp(x_j))/(sum exp(x_i)) \
+  (d/dx_j "softmax"(x)_i) = (I[i = j] - "softmax"(x)_j)"softmax"(x)_i \
+  (d "softmax"(x))/(d x) = ("diag"("softmax"(x)) - "softmax"(x)^top "softmax"(x))
+$
+
+Thus we have,
+$
+  (d L) / (d S) = vec(
+    (d L) slash (d A_1)  ("diag"(A_1) - A_1^top A_1),
+    ...,
+    (d L) slash (d A_n)  ("diag"(A_n) - A_n^top A_n)
+  ) = \
+  vec(
+    (g_1 dot.o A_1) - (g_1 dot A_1) A_1,
+    ...,
+    (g_n dot.o A_n) - (g_n dot A_n) A_n,
+  )  = (g dot.o A) - vec((g_1 dot A_1) A_1, ..., (g_n dot A_n) A_n)
+$
+There's one little trick we can use to make this more efficient. Remember that 
+$
+  (d L)/(d A) = g = (d L)/(d O)V^top
+$
+Then, $
+  g_i dot A_i = ((d L)/(d O)V^top)_i dot A_i = (((d L)/(d O))_i V^top) dot A_i = ((d L)/(d O))_i V^top A_i^top =\
+   ((d L)/(d O))_i O_i^top = ((d L)/(d O))_i dot O_i
+$
+
+So the final gradient can be written as
+$
+  D_i = ((d L)/(d O))_i dot O_i \
+  (g dot.o A) - ("diag"(D)) A = A dot.o (g - D bold(1)^T)
+$
+
+Why this form instead of the previous one? Well notice the computation is entirely local now, we now longer have to scan along entire rows of $A$ to compute the $A_i dot g_i$ terms. So less work, more locality.
+
+The rest is much simpler,
+$
+  (d L)/(d K) = (((d L) slash (d S))^top tilde(Q))/"normalization" quad (d L)/(d tilde(Q)) = (((d L) slash (d S)) tilde(K))/"normalization"
+$
+
+And finally, we differentiate through RoPE.
+$
+    "RoPE"(X_t)_(i, i+1) = R_(t, i) vec(X_t [i], X_t [i+1]) quad R_(t, i) = "Rot"(t theta_i) \
+    (d "RoPE"(X_t)_(i, i+1))/(d X_t)_(i, i+1) = R_(t, i)^top
+$
+
+So we just "unrotate" $d tilde(Q)$ and $d tilde(K)$ to get $d Q$ and $d K$, which can be implemented with the same RoPE kernel.
+
+Now, FlashAttention makes the following observation: you don't actually have to store $(d L) slash (d A)$ and $(d L) slash (d S)$ to memory! $(d L) slash (d A)$ can be computed on the fly from the derivative we got earlier, $(d L) slash (d S)$ too, and then you can directly use $(d L) slash (d S)$ to compute the gradients with respect to the keys and values. This reduces the memory bandwidth required for an attention backwards to linear in the size of the inputs, just like the forward! The full algorithm is as follows (LSE stands for log-sum-exp, the log of the normalization constant in the softmax, saved from the forward).
+$
+  S_(i j) = Q_i K_j^top / sqrt(d) quad 
+  A_(i j) = exp(S_(i j) - "LSE"_i) \
+  G = (d L)/(d O) quad D_i = G_i dot O_i quad g_(i j) = G_i V_j^top \
+  (d L)/(d S_(i j)) = A_(i j) dot.o (g_(i j) - D_i) \
+
+  (d L)/(d Q_i) pluseq (d L)/(d S_(i j)) K_j / sqrt(d) quad
+  (d L)/(d K_j) pluseq (d L)/(d S_(i j))^top Q_i / sqrt(d) \
+  (d L)/(d V_j) pluseq A_(i j)^top G_i
+$
 
 === Inference
 Suppose I want to compute Attention over $X'$ where $X' = "cat"(X, X_t)$. This is commonly needed during autoregressive generation where you extend the input sequence by the last token the model outputted. Turns out a lot of the previous computation can be re-used to make this faster then $O(T^2)$. Under causal masking (and ignoring normalization)...

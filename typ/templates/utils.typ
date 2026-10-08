@@ -313,6 +313,7 @@
 }
 
 #let ip(x, y) = $lr(chevron.l #x, #y chevron.r)$
+#let pluseq = math.op("+=")
 #let argmin = math.op("argmin", limits: true)
 #let argmax = math.op("argmax", limits: true)
 #let EE = math.op(math.bb("E"), limits: true)
