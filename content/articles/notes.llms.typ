@@ -282,7 +282,7 @@ This motivates the following rather obvious optimization: _shrink the memory nee
 - There's so many of these omg...
 
 
-=== Distributed Systems
+=== Ring Attention
 Now, suppose we have a big industry-scale model. At this point even the input tensors $Q, K$ and $V$ are memory bottlenecks. We can avoid holding all of them in memory using a ring-based buffering system. Concretely, give each GPU a row to operate on. 
 $
   mat(
@@ -410,8 +410,116 @@ $
 // TODO: THIS IS REALLY NOT CLEAR (but I think a decent way of viewing this)
 Where $A$ is the overall layerwise attention matrix. From this analysis, it becomes clear that the gradient grows exponentially with depth for pre-norm, but only linearly for Residual Attention.
 
+== Critical Batch Size (#link("https://arxiv.org/pdf/1812.06162")[Credits])
+The goal here is to try and derive from first principles what the optimal batch size should be. Assume that our loss is well-approximated locally by its second order Taylor expansion and let $G$ and $H$ indicate the true values of the gradient and hessian at $theta_0$. With step size $eta$ we have...
+$
+  L(theta) = L(theta_0) + eta G^top (-G) + eta^2/2 G^top H G + O(eta^3)
+$
+
+This isn't a very realistic way to estimate how much we expect our loss to decrease as we typically use minibatch SGD, which means our update-step is a minibatch estimate of the true-gradient, call it $G_"batch"$ instead of $G$. We can still ask how much we expect the expected loss to decrease...
+
+$
+  delta L &= -eta E(Tr(G^top G_"batch")) + eta^2 / 2 E(Tr(G_"batch"^top H G_"batch")) \
+  &= -eta Tr(G^top E(G_"batch")) + eta^2 / 2 Tr(H E(G_"batch" G_"batch"^top)) \
+  &= -eta norm(G)^2 + eta^2 / 2 Tr(H (G G^top + "Cov"(G_"batch"))) \
+  &= -eta norm(G)^2 + eta^2 / 2 (G^top H G + Tr(H "Cov"(G_"batch"))) \
+  &= -eta norm(G)^2 + eta^2 / 2 (G^top H G + 1/B Tr(H "Cov"(G_"sample"))) \
+$
+
+// Accidentally analyzed GD on the minibatch-loss, which is a lot more complicated.
+// $
+//   E(delta L) &= - eta E(Tr(G_"batch"^top G_"batch")) + eta^2/2 E(Tr((G_"batch")^top H_"batch" (G_"batch"))) \
+//    &= - eta Tr(E(G_"batch" G_"batch"^top)) + eta^2/2 Tr(E(H_"batch" (G_"batch") (G_"batch")^top)) \
+
+//   &= - eta (norm(G)^2 + Tr("Cov"(G_"batch"))) + eta^2/2 Tr(H E(G_"batch" G_"batch"^top) + "Cov"(H_"batch", (G_"batch") (G_"batch")^top)) \
+//   &= - eta (norm(G)^2 + Tr("Cov"(G_"batch"))) + eta^2/2 Tr(H G G^top + H"Cov"(G_"batch") + "Cov"(H_"batch", (G_"batch") (G_"batch")^top)) \
+// $
+
+// For the last term, write $H_i = H + A_i$ and $G_i = G + epsilon_i$. Where $A_i$ and $epsilon_i$ are mean-zero random variables.
+// $
+//   Tr("Cov"(H_"batch", (G_"batch") (G_"batch")^top)) = \
+//   E(Tr(macron(A)(G + macron(epsilon))(G + macron(epsilon))^top)) = \
+//   E(Tr(macron(A)(G G + G macron(epsilon)^top + macron(epsilon) G^top + macron(epsilon)macron(epsilon)^top))) = \
+//   E(Tr(macron(A)(G macron(epsilon)^top + macron(epsilon) G^top + macron(epsilon)macron(epsilon)^top))) = \
+//   Tr(E(macron(epsilon)macron(A))G + E(macron(A)macron(epsilon))G^top + E(macron(epsilon)^top macron(A) macron(epsilon))) = \
+//   Tr(1/B E(epsilon_i A_i)G + 1/B E(A_i epsilon_i)G^top + 1/B^2 E(epsilon_i^top A_i epsilon_i))
+// $
+
+We solve for the best value of $eta$.
+$
+  0 = - norm(G)^2 + eta (G^top H G + 1/B Tr(H "Cov"(G_"sample"))) \
+  eta = norm(G)^2 / (G^top H G + 1/B Tr(H "Cov"(G_"sample")))
+$
+
+And our resulting loss reduction is....
+$
+  delta L = - norm(G)^4 /  (G^top H G + 1/B Tr(H "Cov"(G_"sample"))) + norm(G)^4 / (2 (G^top H G + 1/B Tr(H "Cov"(G_"sample")))) = \
+  - norm(G)^4 / (2(G^top H G + 1/B Tr(H "Cov"(G_"sample"))))
+$
+
+Let's think about this $Tr(H "Cov"(G_"sample"))$ term, what does it mean, really? Well, if we write $G_"sample" = G + epsilon$, it's actually equivalent to $E(epsilon^top H epsilon)$, that is, the expected amount you would expect the loss to change if you went in random direction (the linear term in the taylor expansion contributes nothing in expectation). This is of course, highly dependent on the _local geometry_ of the loss function. If there are mainly positive curvature directions, noise hurts, if mainly negative, noise _helps_. This could partly explain the "over-smoothing" phenomenon, where batch sizes that are too large converge to worse optima; with less noise, it's harder to find negative curvature directions.
+
+Now if we write 
+$
+  B_"noise" = Tr(H "Cov"(G_"sample"))/(G^top H G)
+$
+
+We have
+$
+  eta = (norm(G)^2 slash (G^top H G))/(1 + B_"noise" slash B) quad delta L = - (norm(G)^4 slash (2 G^top H G))/(1 + B_"noise" slash B)
+$
+
+Where the quantities in the numerators are what you would get under a pure gradient descent step without noise. So intriguingly, when $B_"noise"$ is high relative to $B$, both the optimal step size and the corresponding loss-decrease scale almost linearly with the batch size, while beyond $B = B_"noise"$ the gains start to rapidly attenuate.
+
+From this, it's clear that there is indeed some sort of "optimal batch size". Suppose I have a training step budget $T$ and some fixed amount of data $D$, such that $B T <= D$.  Large $B$ quickly eats through my dataset while suffering diminishing returns to minibatch size, while small $B$ quickly eats through my step budget. Somewhere in the middle yields efficient training.
+
+
 
 == Scaling
+// How do you best take advantage of a GPU cluster? This can be surprisingly tricky. Adding more GPUs allows you to do more FLOPs/s, but it also requires coordinating with other GPUs. The communication required might significantly limit a given parallelism scheme. What scheme works best is a function of what you are optimizing (cost, latency, throughput), what model you are optimizing, your network topology, your accelerator, and many more variables. I'll cover the high-level of what these schemes are, for a more detailed treatment about when to choose what, see the #link("https://jax-ml.github.io/scaling-book/applied-training/")[Jax Scaling Book].
+
+// Let's start by analyzing the FFN portion of a Transformer. The computation we need to perform is 
+// $
+//   "In"[B, S, D] times_D W_"in" [B, S, D, F] times_F W_"out" [B, S, F, D] = "Out"[B, S, D]
+// $
+
+// Where $times_V$ indicates we reduce along $V$. In the below analysis, GPUs will be conceptually grouped into a _cube_, that is we can each GPU has an X, Y, or Z coordinate. 
+
+// Furthermore, let $A[B, S, F]$ indicate the activations in-between $W_"in"$ and $W_"out"$.
+
+// *Data Parallelism* 
+// $
+//   "In"[B_X, S, D] times_D W_"in" [B_X, S, D, F] times_F W_"out" [B_X, S, F, D] = "Out"[B_X, S, D]
+// $
+// Here $B_X$ indicates we shard $B$ along the $X$-axis. Concretely, the full $"In"$ matrix can only be recovered if stitch together the pieces from GPUs with different X-coordinates. None of the reductions depend on $B$ during the forward, so conveniently we don't need any comms then. During the backward though...
+// $
+//   (d"L")/(d"Out")[B_X, S, D] times_(B, S) "A"[B_X, S, F] = d"W"_"out" [F, D] \
+//   (d"L")/(d"Out")[B_X, S, D] times_(D) W_"out" [B_X, S, F, D] = (d"L")/(d"A") [B_X, S, F] \
+//   (d"L")/(d"A")[B_X, S, F] times_(B, S) "In"[B_X, S, D] = d"W"_"in" [D, F]  \
+//   (d"L")/(d"A")[B_X, S, F] times_(F) W_"in" [B_X, S, D, F] = (d"L")/(d"In") [B_X, S, D] \
+// $
+
+// The reductions along $D$ and $F$ are easy, as those dimensions aren't sharded, every GPU can compute the results locally. For the weight gradients though, we need to reduce along the sharded dimension, and this will require an all-reduce! Thus, Data Parallelism needs enough per-GPU work to hide the all-reduce latency (which can be done asynchronously).
+
+// *Zero*
+// $
+//   "In"[B, S, D] times_D W_"in" [B, S, D_X, F] times_F W_"out" [B_X, S, F, D_X] = "Out"[B_X, S, D]
+// $
+
+// So if you just stare at $"In"[B, S, D] times_D W_"in" [B, S, D_X, F]$ you'll notice you can't actually compute it naively, as since $D$ is sharded you simply don't have enough information on one GPU to finish the computation. To get around this, you can simply gather the full weight matrix just-in-time (e.g. start the gather the layer before so it's fully ready when you need it). Because we know exactly when the weights are going to be needed, it's extremely to have zero-overhead overlap of communications and communications, and so this kind of just gives you free memory per-accelerator memory reductions. 
+
+// In a similar vein, the optimizer state and gradients can be sharded, and when you need to update a weight matrix, you can all-gather the gradients just-in-time. The point of these tricks is to split the memory burden across your cluster.
+
+// *Tensor Parallelism*
+// $
+//   "In"[B, S, D] times_D W_"in" [B, S, D, F_X] times_F W_"out" [B, S, F_X, D] = "Out"[B, S, D]
+// $
+// Ok, what's going on here? The idea is we're going to divide our tensor
+
+// $
+//   "In"[B, S, D_X] times_D W_"in" [B, S, D, F_X] times_F W_"out" [B, S, F_X, D] = "Out"[B, S, D_X]
+// $
+
 When you start making models bigger, you quickly start running into a lot of performance bottlenecks. Your main avenue for addressing them is to somehow share the load across more and more GPUs which motivates a lot of interesting parallelism strategies. All of these strategies have _limits_ for any given model, so you'll often end up using more then one of them. Libraries like Megatron handle choosing the optimal combination of these strategies for you.
 
 - I have so much training data, iterations take forever!
@@ -430,5 +538,27 @@ When you start making models bigger, you quickly start running into a lot of per
   - *Context Parallelism (CP)*: Use the FlashAttention trick to compute and fuse time-based chunks.
   - Obviously limited by the size of contexts you are processing.
 
+
+
 // - The cluster setup I have for processing prompts is suboptimal for autoregressive inference.
 //   - *PD-Disaggregation (PD)*: Use seperate clusters for Prefill (processing the prompt) and Decode (inference).
+// 
+// 
+
+// === Sharded Mamtuls
+// + Every accelerator has the full version of both matrices.
+//   $
+//     "In"[N, K] times_K W_"in" [K, M] 
+//   $
+//   Just perform the matmuls locally, no communication needed.
+// + One axis is sharded.
+//   $
+//     "In"[N_X, K] times_K W_"in" [K, M] 
+//   $
+//   Perform an all-gather and then perform the matmuls locally.
+// + The reduction axis is sharded on both. 
+//   $
+//     "In"[N, K_X] times_K W_"in" [K_X, M] 
+//   $
+//   Perform local matmuls and then an all-reduce.
+// + 
