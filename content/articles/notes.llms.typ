@@ -97,7 +97,7 @@ To each unique _token_ we'll associate a random, learnable, vector, called the t
 Let $X$ be a sequence of length $T$. Attention is defined as follows.
 $
   Q = "RoPE"(X W_Q) quad K = "RoPE"(X W_K) quad V = X W_V \
-  O = "softmax"_"rowwise" ((Q K^top + L)/"normalization") V
+  O = "softmax"_"rowwise" ((Q K^top + L)/sqrt(d)) V
 $
 $L$ is typically a $T times T$ matrix with $-infinity$ on entries for whom you want to zero the softmax output, and $0$ everywhere else. You can think of Attention as a clever linearly mixing $X$ across its time dimension, plus a projection.
 $
@@ -179,77 +179,113 @@ I'll slightly rephrase the defintion to make the proof slicker.
 $
   Q = X W_Q quad K = X W_K quad V = X W_V \
   tilde(Q) = "RoPE"(Q) quad tilde(V) = "RoPE"(V) \
-  S = (tilde(Q) tilde(K)^top + L)/"normalization" \
-  A = "softmax"_"rowwise" (S)  quad O = A V
+  S = (tilde(Q) tilde(K)^top + L)/sqrt(d) quad A = "softmax"(S)  quad O = A V
 $
-Now assume we know $d L slash d O$. We immediately have
+Now assume we know $nabla L(O)$. We immediately have
 $
-  (d L)/(d A) = (d L)/(d O)V^top quad  (d L)/(d V) = A^top (d L)/(d O) \
-  (d L)/(d W_v) = X^top (d L)/(d V) quad (d L)/(d W_k) = X^top (d L)/(d K) quad (d L)/(d W_q) = X^top (d L)/(d Q) \
-  (d L)/(d X) = (d L)/(d V) W_V^top + (d L)/(d Q) W_Q^top + (d L)/(d K) W_K^top
+  nabla L(A) = nabla L(O) V^top quad  nabla L(V) = A^top nabla L(O) \
+  nabla L(W_v) = X^top nabla L(V) quad nabla L(W_k) = X^top nabla L(K) quad nabla L(W_q) = X^top nabla L(Q) \
+  nabla L(X) = nabla L(V) W_V^top + nabla L(Q) W_Q^top + nabla L(K) W_K^top 
 $
 
 We now need to differentiate through rowwise softmax.
 $
-  "softmax"(x)_i = exp(x_i) / (sum exp(x_i)) quad log("softmax"(x))_i = x_i - log(sum exp(x_i)) \
-  d/dx_j log("softmax"(x)_i) = (d/dx_j "softmax"(x)_i)/"softmax"(x)_i =  I[i = j] - (exp(x_j))/(sum exp(x_i)) \
-  (d/dx_j "softmax"(x)_i) = (I[i = j] - "softmax"(x)_j)"softmax"(x)_i \
-  (d "softmax"(x))/(d x) = ("diag"("softmax"(x)) - "softmax"(x)^top "softmax"(x))
+  Z = exp[S] 1 quad "softmax"(S) = exp[S - log[Z]1^top] \
+  A = "softmax"(S) quad dA = d"softmax"(S)
+$
+$
+  ip(nabla L(S), d S) &= ip(nabla L(A), d A) \
+  &= ip(nabla L(A), d"softmax"(S)) \
+  &= ip(nabla L(A), A dot.o (d S - d log[Z]1^top)) \
+  &= ip(nabla L(A) dot.o A, d S) - ip(nabla L(A) dot.o A, d log[Z]1^top))
 $
 
-Thus we have,
+Compute the inner differential term.
 $
-  (d L) / (d S) = vec(
-    (d L) slash (d A_1)  ("diag"(A_1) - A_1^top A_1),
-    ...,
-    (d L) slash (d A_n)  ("diag"(A_n) - A_n^top A_n)
-  ) = \
-  vec(
-    (g_1 dot.o A_1) - (g_1 dot A_1) A_1,
-    ...,
-    (g_n dot.o A_n) - (g_n dot A_n) A_n,
-  )  = (g dot.o A) - vec((g_1 dot A_1) A_1, ..., (g_n dot A_n) A_n)
+  d Z = d(exp[S]) 1 = (exp[S] dot.o d S) 1 \
+  d(log[Z]1^top) = ("inv"[Z] dot.o d Z) 1^top = "inv"[Z]1^top dot.o (exp[S] dot.o d S) 1 1^top = (A dot.o d S) 1 1^top
 $
+
+Substitute it back in...
+$
+  => ip(nabla L(A) dot.o A, (A dot.o d S) 1 1^top) = ip((nabla L(A) dot.o A) 1 1^top dot.o A, d S)
+$
+$
+  ip(nabla L(S), d S) = ip(nabla L(A) dot.o A - (nabla L(A) dot.o A) 1 1^top dot.o A, d S) \
+  nabla L(S) = nabla L(A) dot.o A - (nabla L(A) dot.o A) 1 1^top dot.o A
+$
+
+// $
+//   "softmax"(x)_i = exp(x_i) / (sum exp(x_i)) quad log("softmax"(x))_i = x_i - log(sum exp(x_i)) \
+//   d/dx_j log("softmax"(x)_i) = (d/dx_j "softmax"(x)_i)/"softmax"(x)_i =  I[i = j] - (exp(x_j))/(sum exp(x_i)) \
+//   (d/dx_j "softmax"(x)_i) = (I[i = j] - "softmax"(x)_j)"softmax"(x)_i \
+//   (d "softmax"(x))/(d x) = ("diag"("softmax"(x)) - "softmax"(x)^top "softmax"(x))
+// $
+
+// Thus we have,
+// $
+//   (d L) / (d S) = vec(
+//     (d L) slash (d A_1)  ("diag"(A_1) - A_1^top A_1),
+//     ...,
+//     (d L) slash (d A_n)  ("diag"(A_n) - A_n^top A_n)
+//   ) = \
+//   vec(
+//     (g_1 dot.o A_1) - (g_1 dot A_1) A_1,
+//     ...,
+//     (g_n dot.o A_n) - (g_n dot A_n) A_n,
+//   )  = (g dot.o A) - vec((g_1 dot A_1) A_1, ..., (g_n dot A_n) A_n)
+// $
 There's one little trick we can use to make this more efficient. Remember that 
 $
-  (d L)/(d A) = g = (d L)/(d O)V^top
+  nabla L(A) = nabla L(O) V^top
 $
-Then, $
-  g_i dot A_i = ((d L)/(d O)V^top)_i dot A_i = (((d L)/(d O))_i V^top) dot A_i = ((d L)/(d O))_i V^top A_i^top =\
-   ((d L)/(d O))_i O_i^top = ((d L)/(d O))_i dot O_i
+
+Hence, 
 $
+  (nabla L(A) dot.o A) 1 1^top dot.o A = (nabla L(O)V^top dot.o A) 1 1^top dot.o A = \
+  "RowSum"(nabla L(O)_i V^top dot.o A_i) 1^top dot.o A = \
+  "RowSum"(nabla L(O)_i V^top A_i^top) 1^top dot.o A = \
+  "RowSum"(nabla L(O)_i O_i^top) 1^top dot.o A = \
+  (nabla L(O) dot.o O) 1 1^top dot.o A
+$
+// Then, $
+//   g_i dot A_i = ((d L)/(d O)V^top)_i dot A_i = (((d L)/(d O))_i V^top) dot A_i = ((d L)/(d O))_i V^top A_i^top =\
+//    ((d L)/(d O))_i O_i^top = ((d L)/(d O))_i dot O_i
+// $
 
 So the final gradient can be written as
 $
-  D_i = ((d L)/(d O))_i dot O_i \
-  (g dot.o A) - ("diag"(D)) A = A dot.o (g - D bold(1)^T)
+  (nabla L(A) - (nabla L(O) dot.o O)1 1^top) dot.o A
 $
+// $
+//   D_i = ((d L)/(d O))_i dot O_i \
+//   (g dot.o A) - ("diag"(D)) A = A dot.o (g - D bold(1)^T)
+// $
 
-Why this form instead of the previous one? Well notice the computation is entirely local now, we now longer have to scan along entire rows of $A$ to compute the $A_i dot g_i$ terms. So less work, more locality.
+Why this form instead of the previous one? Well before we had those $1 1^top$ terms applied to $A$ and now they're applied to $O$ instead. Those terms correspond to row summation and broadcasts, so you need to read the whole row to compute them. $A$ is a huge matrix that we prefer to materialize on the fly, so not needing to reduce along its rows is a big win!
 
 The rest is much simpler,
 $
-  (d L)/(d K) = (((d L) slash (d S))^top tilde(Q))/"normalization" quad (d L)/(d tilde(Q)) = (((d L) slash (d S)) tilde(K))/"normalization"
+  nabla L(K) = (nabla L(S)^top tilde(Q))/sqrt(d) quad nabla L(tilde(Q)) = (nabla L(S) tilde(K))/sqrt(d)
 $
 
 And finally, we differentiate through RoPE.
 $
     "RoPE"(X_t)_(i, i+1) = R_(t, i) vec(X_t [i], X_t [i+1]) quad R_(t, i) = "Rot"(t theta_i) \
-    (d "RoPE"(X_t)_(i, i+1))/(d X_t)_(i, i+1) = R_(t, i)^top
+    J("RoPE"(X_t)_(i, i+1))  = R_(t, i)
 $
 
-So we just "unrotate" $d tilde(Q)$ and $d tilde(K)$ to get $d Q$ and $d K$, which can be implemented with the same RoPE kernel.
+So "unrotate" $d tilde(Q)$ and $d tilde(K)$ to get $d Q$ and $d K$, which can be implemented with the same RoPE kernel.
 
-Now, FlashAttention makes the following observation: you don't actually have to store $(d L) slash (d A)$ and $(d L) slash (d S)$ to memory! $(d L) slash (d A)$ can be computed on the fly from the derivative we got earlier, $(d L) slash (d S)$ too, and then you can directly use $(d L) slash (d S)$ to compute the gradients with respect to the keys and values. This reduces the memory bandwidth required for an attention backwards to linear in the size of the inputs, just like the forward! The full algorithm is as follows (LSE stands for log-sum-exp, the log of the normalization constant in the softmax, saved from the forward).
+Now, FlashAttention makes the following observation: you don't actually have to store $nabla L(A)$ and $nabla L(S)$ to memory! $nabla L(A)$ can be computed on the fly from the derivative we got earlier, $nabla L(S)$ too, and then you can directly use $nabla L(S)$ to compute the gradients with respect to the keys and values. This reduces the memory bandwidth required for an attention backwards to linear in the size of the inputs, just like the forward! The full algorithm is as follows. $log(Z)$ is saved from the forward.
 $
-  S_(i j) = Q_i K_j^top / sqrt(d) quad 
-  A_(i j) = exp(S_(i j) - "LSE"_i) \
-  G = (d L)/(d O) quad D_i = G_i dot O_i quad g_(i j) = G_i V_j^top \
-  (d L)/(d S_(i j)) = A_(i j) dot.o (g_(i j) - D_i) \
-
-  (d L)/(d Q_i) pluseq (d L)/(d S_(i j)) K_j / sqrt(d) quad
-  (d L)/(d K_j) pluseq (d L)/(d S_(i j))^top Q_i / sqrt(d) \
-  (d L)/(d V_j) pluseq A_(i j)^top G_i
+  S_(i j) = Q_i K_j^top slash sqrt(d) \
+  A_(i j) = exp(S_(i j) - log(Z)_i) \
+  nabla L(A)_(i j) = nabla L(O)_i V_j^top \
+  nabla L(S)_(i j) = A_(i j) dot.o (nabla L(A)_(i j) - nabla L(O)_i dot O_i) \
+  nabla L(Q)_(i) <- nabla L(Q)_(i) + nabla L(S)_(i j) K_j slash sqrt(d) \
+  nabla L(K)_(j) <- nabla L(K)_(j) + nabla L(S)^top_(i j) Q_i slash sqrt(d) \
+  nabla L(V)_j <- L(V)_j + A_(i j)^top G_i
 $
 
 === Inference
@@ -336,6 +372,7 @@ Or this?
 )))
 
 Consider the first setup (*Pre-Layer Norm*). The outputs of the FFN are directly added to the residual stream. Thus, over the course of many layers, the residual stream will typically grow larger (e.g. this is similar to a random walk setup where you repeatedly add the same increment). This isn't _explosive_ growth (it's linear or sublinear depending on how correlated you think the increments are). What do the gradients look like?
+// TODO: notation here is broken. You need to take derivatives with respect to the loss...
 
 $
   dx_(t+1)/dx_t = I + (dif "FFN"("LN"(x_t)))/(dif "LN"(x_t)) (dif L N(x_t))/(d x_t)
