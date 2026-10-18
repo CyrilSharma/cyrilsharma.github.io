@@ -244,10 +244,10 @@
     p-frame(attrs: ("class": "block-equation"), it)
   } else {
      if measure(it).width >= 270pt {
-      text(fill: red, [
-        Warning, this equation is a very wide 
-        and won't render well on small screens.
-      ])
+      // text(fill: red, [
+      //   Warning, this equation is a very wide 
+      //   and won't render well on small screens.
+      // ])
     }
     it
   }
