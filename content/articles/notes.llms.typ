@@ -22,11 +22,11 @@
   layer: -1
 )
 
-== Architecture
+= Overview
 The architecture of a prototypical LLM is actually remarkably simple.
 
 
-*Layer*
+*Transformer Block*
 #let idiomatic_arch = graphic(align(center, diagram(
   spacing: (8mm, 11mm),
   node-fill: white,
@@ -54,7 +54,7 @@ The architecture of a prototypical LLM is actually remarkably simple.
 
 #idiomatic_arch
 
-*Network*
+*Transformer*
 #align(center, graphic(diagram(
   spacing: (8mm, 11mm),
   node-stroke: 0.55pt,
@@ -62,22 +62,37 @@ The architecture of a prototypical LLM is actually remarkably simple.
   node-shape: rect,
 
   node((1,0), align(center)[Embed]),
-  node((2,0), align(center)[Layer $times \#"layers"$]),
-  node((3,0), align(center)[Unembed]),
-  node((4,0), align(center)[Softmax]),
+  node((2,0), align(center)[$"Layer"_1$]),
+  node((3,0), align(center)[...]),
+  node((4,0), align(center)[$"Layer"_n$]),
+  node((5,0), align(center)[Unembed]),
+  node((6,0), align(center)[Softmax]),
 
   edge((1,0), (2,0), "-|>"),
   edge((2,0), (3,0), "-|>"),
   edge((3,0), (4,0), "-|>"),
+  edge((4,0), (5,0), "-|>"),
+  edge((5,0), (6,0), "-|>"),
 )))
 
-Attention mixes across _time_, FFNs mix across _token dimensions_.
+*LLM*
+#align(center, graphic(diagram(
+  spacing: (8mm, 11mm),
+  node-stroke: 0.55pt,
+  node-corner-radius: 2pt,
+  node-shape: rect,
 
-== Input Processing
-To process language, we first have to turn it into a machine-friendly format. Here's the process
+  node((1,0), align(center)[Tokenizer]),
+  node((2,0), align(center)[Transformer]),
+  node((3,0), align(center)[Sampler]),
 
-=== Tokenization
-Essentially, break the text up into smaller pieces called tokens. These are not _words_, although both words and tokens can be considered groups of bytes.
+
+  edge((1,0), (2,0), "-|>"),
+  edge((2,0), (3,0), "-|>"),
+)))
+
+== Tokenization
+The first thing that happens when you query an LLM is the text gets split into small pieces of text called tokens. These "pieces" are not _words_, but both words and tokens can be considered groups of bytes.
 
 + Why are we using words at all, why not just use characters?
   - As we will later see, Attention takes $O(T^2)$ time to process a sequence of length $T$. Thus, reducing the length of the sequence it processes is a useful optimization.
@@ -90,8 +105,27 @@ To decide what your tokens are, you'll typically run an iterative merging algori
 
 Once you've decided what tokens you'll use, you just need to apply the merge rules you obtained in Byte Pair Encoding in the same order for whatever piece of text you want to process. You can do this with a priority-queue. There might be other optimization available. For example, many tokenizers split on whitespace tokens, the initial split-on-whitespace phase is called pretokenization. The "pre-tokens" are often small enough to cache their tokenizations and this is the approach used in fast tokenizers like #link("https://github.com/marcelroed/gigatoken")[GigaToken].
 
-=== Embedding
-To each unique _token_ we'll associate a random, learnable vector, called the token's _embedding_. This is typically implemented as a lookup table.
+== Embedding and Unembedding
+For each unique _token_ we'll associate a random, learnable vector, called the token's _embedding_. This is typically implemented as a lookup table, e.g.
+$
+  X in "Token Vocabulary" quad "Embed"(X) in R^D \
+  "Embed"(X) = "Table"[X]
+$
+
+If you write $X$ as one-hot instead of an index (e.g. $0-1$ vector of size $R^(|"Token Vocabulary"|)$), then an equivalent (but more computationally expensive) implementation is
+$
+  "Embed"(X) = X W_E
+$
+
+At the end we of the transformer we do almost the reverse
+$
+  H in R^D quad "Unembed"(H) in R^(|"Token Vocabulary"|) \ 
+  "Uembed"(H) = H W_U
+$
+
+Some early Transformer models even took $W_U = W_E^top$ which gives an interesting inductive bias: if you want to output a given token, the best way to do that is to make the hidden state very close to the original embedding. be the opposite of the embedding module.
+
+
 
 == Attention
 Let $X$ be a $T times D$ matrix (i.e $\#"tokens" times "token-dim"$). Attention is defined as follows.
@@ -202,7 +236,7 @@ $
 
 Incrementally merge chunks using FlashAttention and boom! You've successfully reduced the memory required per GPU.
 
-=== Backward
+=== Attention Backward
 I'll slightly rephrase the defintion to make the proof slicker.
 $
   Q = X W_Q quad K = X W_K quad V = X W_V \
@@ -314,7 +348,7 @@ $
   nabla L(V)_j <- L(V)_j + A_(i j)^top G_i
 $
 
-Where the $nabla L(S)^top_(i j)$ term is the $(i, j)$th sub-block, tranposed, not an index into a tranpose.
+Where the $nabla L(S)^top_(i j)$ term is the $(i, j)$th sub-block, tranposed, not an index into a tranpose. Interestingly, $nabla L(tilde(Q))$ requires reducing $S$ along a different dimension then $nabla L(tilde(K)), nabla L(tilde(V))$, which either requires two passes or using atomics to reduce along one of the dimensions. This is not a problem you see with the forward.
 
 === Backwards Ring Attention
 This is very similar to before. Look at the above algorithm. Anything with the $i$ index is not rotated, everything with just the $j$ index is. We perform $T$ iterations, and it's easy to see that every combo $(i, j)$ is encountered, so every term gets computed. Notice that we have two new terms to rotate, the $nabla L(tilde(K)_j)$ and $nabla L(tilde(V)_j)$ terms. 
@@ -348,7 +382,181 @@ This motivates the following rather obvious optimization: _shrink the memory nee
 - Sample Keys and Values from the cache instead of using all of them.
 - There's so many of these omg...
 
+== FFN
+In Transformers, *FFN* usually refers to a very specific type of feed-forward network. Specifically a 2-layer SWIGLU MLP, defined as follows.
+$
+  "FFN"(X) = ("swish"(X W_"gate") dot.o X W_"up")W_"down"
+$
 
+
+// #import "@preview/fletcher:0.5.9" as fletcher: diagram, node, edge
+
+#align(center, diagram(
+  spacing: (12mm, 12mm),
+  node-fill: white,
+  node-stroke: 0.55pt,
+  node-corner-radius: 2pt,
+  node-shape: rect,
+  edge-corner-radius: 3pt,
+  edge-stroke: 0.55pt,
+  mark-scale: 70%,
+
+  node((0, 1), [$X$], name: <x>),
+
+  node((1, 0.5), [$W_"gate"$], name: <gate>),
+  node((1, 1.5), [$W_"up"$], name: <up>),
+
+  // node((3.5, 0), [SiLU], name: <silu>),
+  node((2, 1), [$dot.o$], shape: circle, name: <mul>),
+
+  node((3, 1), [$W_"down"$], name: <down>),
+  node((4, 1), [$y$], name: <out>),
+
+  edge(<x>, <gate>, "-|>"),
+  edge(<x>, <up>, "-|>"),
+  edge(<gate>, <mul>, "-|>", label: "SiLU", label-angle: -22.5deg),
+  edge(<up>, <mul>, "-|>"),
+  edge(<mul>, <down>, "-|>"),
+  edge(<down>, <out>, "-|>"),
+))
+
+
+swish is an elementwise function that looks almost like a ReLU but is differentiable everywhere and tends to be a little bit easier to optimize. Conceptually, the swish function _gates_ how much of each input we should keep, hence the naming. $W_"up"$ has that name because it typically projects the input up from dimension $D$ to dimension $F$, where typically $F approx 4 D$, and $W_"down"$ similarly maps from a larger inner dimension back down.
+
+Intriguingly, because we map up to $F approx 4 D$, this layer is often _most of the work in a transformer_! For some quick napkin math...
+$
+  "ATTN FLOPs" approx "FLOP"s(Q, K, V) + "FLOP"s((Q K^top) V) = 6B S D^2 + 4 B S^2 D \ 
+  "FFN FLOPs" approx 3 (2 B D F) = 6 B S D F approx 24 B S D^2 \ 
+  "FFN FLOPs" - "ATTN FLOPs" = 18 B S D^2 - 4 B S^2 D
+$
+
+So $S > 4.5 D$ in order for attention to dominate. Since $D$ is often $approx 10K$, this corresponds to pretty large sequences on the  order of $50k$ elements. During Pre-Training you usually use much smaller sequences, during Inference at long contexts such lengths are more likely.
+
+=== MOEs
+With LLMs, one of the easiest ways to improve performance is scaling the number of parameters. However, increasing the number of parameters often correspondingly increases the amount of compute you end up doing! MOEs can be thought of as work-around. In a nutshell, they let you train a large number of FFNs (defined the same way as above) called _experts_. During training and inference, only a subset of these experts fire, decoupling compute from parameters. A _router_ is used to choose which experts to send the token too, it's usually something like a linear mapping following by Top-K.
+
+
+#align(center, diagram(
+  spacing: (20mm, 12mm),
+  node-fill: white,
+  node-stroke: 0.55pt,
+  node-corner-radius: 2pt,
+  node-shape: rect,
+  edge-corner-radius: 3pt,
+  edge-stroke: 0.55pt,
+  mark-scale: 70%,
+
+  node((0, 1), [$X$], name: <x>),
+
+  node((1, 1), [Router], name: <router>),
+
+  node((2, 0.5), [Expert $1$], name: <e1>),
+  node((2, 1), [$dots.v$], stroke: none, fill: none),
+  node((2, 1.5), [Expert $n$], name: <en>),
+
+  node((3, 1), [$sum$], shape: circle, name: <sum>),
+  node((4, 1), [$Y$], name: <out>),
+
+  edge(<x>, <router>, "-|>"),
+
+  edge(<router>, <e1>, "-|>"),
+  edge(<router>, <en>, "-|>"),
+
+  edge(<e1>, <sum>, "-|>", label: [$p_1$]),
+  edge(<en>, <sum>, "-|>", label: [$p_n$], label-side: right),
+
+  edge(<sum>, <out>, "-|>"),
+))
+
+= Scaling
+// How do you best take advantage of a GPU cluster? This can be surprisingly tricky. Adding more GPUs allows you to do more FLOPs/s, but it also requires coordinating with other GPUs. The communication required might significantly limit a given parallelism scheme. What scheme works best is a function of what you are optimizing (cost, latency, throughput), what model you are optimizing, your network topology, your accelerator, and many more variables. I'll cover the high-level of what these schemes are, for a more detailed treatment about when to choose what, see the #link("https://jax-ml.github.io/scaling-book/applied-training/")[Jax Scaling Book].
+
+// Let's start by analyzing the FFN portion of a Transformer. The computation we need to perform is 
+// $
+//   "In"[B, S, D] times_D W_"in" [B, S, D, F] times_F W_"out" [B, S, F, D] = "Out"[B, S, D]
+// $
+
+// Where $times_V$ indicates we reduce along $V$. In the below analysis, GPUs will be conceptually grouped into a _cube_, that is we can each GPU has an X, Y, or Z coordinate. 
+
+// Furthermore, let $A[B, S, F]$ indicate the activations in-between $W_"in"$ and $W_"out"$.
+
+// *Data Parallelism* 
+// $
+//   "In"[B_X, S, D] times_D W_"in" [B_X, S, D, F] times_F W_"out" [B_X, S, F, D] = "Out"[B_X, S, D]
+// $
+// Here $B_X$ indicates we shard $B$ along the $X$-axis. Concretely, the full $"In"$ matrix can only be recovered if stitch together the pieces from GPUs with different X-coordinates. None of the reductions depend on $B$ during the forward, so conveniently we don't need any comms then. During the backward though...
+// $
+//   (d"L")/(d"Out")[B_X, S, D] times_(B, S) "A"[B_X, S, F] = d"W"_"out" [F, D] \
+//   (d"L")/(d"Out")[B_X, S, D] times_(D) W_"out" [B_X, S, F, D] = (d"L")/(d"A") [B_X, S, F] \
+//   (d"L")/(d"A")[B_X, S, F] times_(B, S) "In"[B_X, S, D] = d"W"_"in" [D, F]  \
+//   (d"L")/(d"A")[B_X, S, F] times_(F) W_"in" [B_X, S, D, F] = (d"L")/(d"In") [B_X, S, D] \
+// $
+
+// The reductions along $D$ and $F$ are easy, as those dimensions aren't sharded, every GPU can compute the results locally. For the weight gradients though, we need to reduce along the sharded dimension, and this will require an all-reduce! Thus, Data Parallelism needs enough per-GPU work to hide the all-reduce latency (which can be done asynchronously).
+
+// *Zero*
+// $
+//   "In"[B, S, D] times_D W_"in" [B, S, D_X, F] times_F W_"out" [B_X, S, F, D_X] = "Out"[B_X, S, D]
+// $
+
+// So if you just stare at $"In"[B, S, D] times_D W_"in" [B, S, D_X, F]$ you'll notice you can't actually compute it naively, as since $D$ is sharded you simply don't have enough information on one GPU to finish the computation. To get around this, you can simply gather the full weight matrix just-in-time (e.g. start the gather the layer before so it's fully ready when you need it). Because we know exactly when the weights are going to be needed, it's extremely to have zero-overhead overlap of communications and communications, and so this kind of just gives you free memory per-accelerator memory reductions. 
+
+// In a similar vein, the optimizer state and gradients can be sharded, and when you need to update a weight matrix, you can all-gather the gradients just-in-time. The point of these tricks is to split the memory burden across your cluster.
+
+// *Tensor Parallelism*
+// $
+//   "In"[B, S, D] times_D W_"in" [B, S, D, F_X] times_F W_"out" [B, S, F_X, D] = "Out"[B, S, D]
+// $
+// Ok, what's going on here? The idea is we're going to divide our tensor
+
+// $
+//   "In"[B, S, D_X] times_D W_"in" [B, S, D, F_X] times_F W_"out" [B, S, F_X, D] = "Out"[B, S, D_X]
+// $
+
+When you start making models bigger, you quickly start running into a lot of performance bottlenecks. Your main avenue for addressing them is to somehow share the load across more and more GPUs, but this is non-trivial as naive approaches will bottleneck the model computation on communicating between GPUs. This motivates a lot of interesting parallelism strategies.
+
+- *Data Parallelism (DP)*
+  - Process batches in parallel, then average the gradients.
+- *Pipeline Parallelism (PP)*:
+  - Host different layers on different GPUs, pass the outputs of one layer to the GPUs hosting the next.
+- *Tensor Parallelism (TP)*:
+  - Divide the operation (typically a matmul) into chunks i.e.
+    $
+      W X = mat(W_0; ...; W_n) X => "GPU"_i "computes" W_i X
+    $
+- *Expert Parallelism (EP)*:
+  - Divide MOE experts across GPUs. Send tokens to-and-from their relevant experts for processing.
+- *Context Parallelism (CP)*:
+  - Use the FlashAttention trick to process an entire sequence in parallel.
+
+I'll update this with a deeper dive into how these interplay and how you should choose which ones to use.
+
+
+
+// - The cluster setup I have for processing prompts is suboptimal for autoregressive inference.
+//   - *PD-Disaggregation (PD)*: Use seperate clusters for Prefill (processing the prompt) and Decode (inference).
+// 
+// 
+
+// === Sharded Mamtuls
+// + Every accelerator has the full version of both matrices.
+//   $
+//     "In"[N, K] times_K W_"in" [K, M] 
+//   $
+//   Just perform the matmuls locally, no communication needed.
+// + One axis is sharded.
+//   $
+//     "In"[N_X, K] times_K W_"in" [K, M] 
+//   $
+//   Perform an all-gather and then perform the matmuls locally.
+// + The reduction axis is sharded on both. 
+//   $
+//     "In"[N, K_X] times_K W_"in" [K_X, M] 
+//   $
+//   Perform local matmuls and then an all-reduce.
+// + 
+
+= Theory
 
 == Residual Stream
 There's actually a very important decision lurking in how you hook up the residual stream.
@@ -368,12 +576,12 @@ Or this?
   mark-scale: 70%,
 
   node((0,0),        [Hidden],    name: <in>),    edge("-|>"),
+  node((rel: (1,0)), [Norm],      name: <norm2>), edge("-|>"),
   node((rel: (1,0)), [Attention], name: <attn>),  edge("-|>"),
   node((rel: (1,0)), [Add],       name: <add1>),  edge("-|>"),
   node((rel: (1,0)), [Norm],      name: <norm1>), edge("-|>"),
   node((rel: (1,0)), [FFN],       name: <ffn>),   edge("-|>"),
   node((rel: (1,0)), [Add],       name: <add2>), edge("-|>"),
-  node((rel: (1,0)), [Norm],      name: <norm2>), edge("-|>"),
   node((rel: (1,0)), [Hidden],    name: <out>),
 
   tap(<attn>, <tap1>),
@@ -545,93 +753,3 @@ $
 Where the quantities in the numerators are what you would get under a pure gradient descent step without noise. So intriguingly, when $B_"noise"$ is high relative to $B$, both the optimal step size and the corresponding loss-decrease scale almost linearly with the batch size, while beyond $B = B_"noise"$ the gains start to rapidly attenuate.
 
 From this, it's clear that there is indeed some sort of "optimal batch size". Suppose I have a training step budget $T$ and some fixed amount of data $D$, such that $B T <= D$.  Large $B$ quickly eats through my dataset while suffering diminishing returns to minibatch size, while small $B$ quickly eats through my step budget. Somewhere in the middle yields efficient training.
-
-
-
-== Scaling
-// How do you best take advantage of a GPU cluster? This can be surprisingly tricky. Adding more GPUs allows you to do more FLOPs/s, but it also requires coordinating with other GPUs. The communication required might significantly limit a given parallelism scheme. What scheme works best is a function of what you are optimizing (cost, latency, throughput), what model you are optimizing, your network topology, your accelerator, and many more variables. I'll cover the high-level of what these schemes are, for a more detailed treatment about when to choose what, see the #link("https://jax-ml.github.io/scaling-book/applied-training/")[Jax Scaling Book].
-
-// Let's start by analyzing the FFN portion of a Transformer. The computation we need to perform is 
-// $
-//   "In"[B, S, D] times_D W_"in" [B, S, D, F] times_F W_"out" [B, S, F, D] = "Out"[B, S, D]
-// $
-
-// Where $times_V$ indicates we reduce along $V$. In the below analysis, GPUs will be conceptually grouped into a _cube_, that is we can each GPU has an X, Y, or Z coordinate. 
-
-// Furthermore, let $A[B, S, F]$ indicate the activations in-between $W_"in"$ and $W_"out"$.
-
-// *Data Parallelism* 
-// $
-//   "In"[B_X, S, D] times_D W_"in" [B_X, S, D, F] times_F W_"out" [B_X, S, F, D] = "Out"[B_X, S, D]
-// $
-// Here $B_X$ indicates we shard $B$ along the $X$-axis. Concretely, the full $"In"$ matrix can only be recovered if stitch together the pieces from GPUs with different X-coordinates. None of the reductions depend on $B$ during the forward, so conveniently we don't need any comms then. During the backward though...
-// $
-//   (d"L")/(d"Out")[B_X, S, D] times_(B, S) "A"[B_X, S, F] = d"W"_"out" [F, D] \
-//   (d"L")/(d"Out")[B_X, S, D] times_(D) W_"out" [B_X, S, F, D] = (d"L")/(d"A") [B_X, S, F] \
-//   (d"L")/(d"A")[B_X, S, F] times_(B, S) "In"[B_X, S, D] = d"W"_"in" [D, F]  \
-//   (d"L")/(d"A")[B_X, S, F] times_(F) W_"in" [B_X, S, D, F] = (d"L")/(d"In") [B_X, S, D] \
-// $
-
-// The reductions along $D$ and $F$ are easy, as those dimensions aren't sharded, every GPU can compute the results locally. For the weight gradients though, we need to reduce along the sharded dimension, and this will require an all-reduce! Thus, Data Parallelism needs enough per-GPU work to hide the all-reduce latency (which can be done asynchronously).
-
-// *Zero*
-// $
-//   "In"[B, S, D] times_D W_"in" [B, S, D_X, F] times_F W_"out" [B_X, S, F, D_X] = "Out"[B_X, S, D]
-// $
-
-// So if you just stare at $"In"[B, S, D] times_D W_"in" [B, S, D_X, F]$ you'll notice you can't actually compute it naively, as since $D$ is sharded you simply don't have enough information on one GPU to finish the computation. To get around this, you can simply gather the full weight matrix just-in-time (e.g. start the gather the layer before so it's fully ready when you need it). Because we know exactly when the weights are going to be needed, it's extremely to have zero-overhead overlap of communications and communications, and so this kind of just gives you free memory per-accelerator memory reductions. 
-
-// In a similar vein, the optimizer state and gradients can be sharded, and when you need to update a weight matrix, you can all-gather the gradients just-in-time. The point of these tricks is to split the memory burden across your cluster.
-
-// *Tensor Parallelism*
-// $
-//   "In"[B, S, D] times_D W_"in" [B, S, D, F_X] times_F W_"out" [B, S, F_X, D] = "Out"[B, S, D]
-// $
-// Ok, what's going on here? The idea is we're going to divide our tensor
-
-// $
-//   "In"[B, S, D_X] times_D W_"in" [B, S, D, F_X] times_F W_"out" [B, S, F_X, D] = "Out"[B, S, D_X]
-// $
-
-When you start making models bigger, you quickly start running into a lot of performance bottlenecks. Your main avenue for addressing them is to somehow share the load across more and more GPUs which motivates a lot of interesting parallelism strategies. All of these strategies have _limits_ for any given model, so you'll often end up using more then one of them. Libraries like Megatron handle choosing the optimal combination of these strategies for you.
-
-- I have so much training data, iterations take forever!
-  - *Data Parallelism (DP)*: Process batches in parallel, then average the gradients.
-  - Technically scalable to the whole dataset but more steps trumps more accurate steps at a certain point (a derivation I'll show at some point?)
-- My model is too big to fit on a single GPU.
-  - *Pipeline Parallelism (PP)*: Host different layers on different GPUs, pass the outputs of one layer to the GPUs hosting the next.
-  - Limited by the size of your model.
-- My weight tensors are too big, a single GPU can't fit the whole thing in memory.
-  - *Tensor Parallelism (TP)*: Divide the operation (typically a matmul) into chunks i.e.
-    $
-      W X = mat(W_0; ...; W_n) X => "GPU"_i "computes" W_i X
-    $
-  - Once matrices easily fit into GPU memory, scaling further degrades GPU utilization.
-- My prompts/training sequences are too big (by memory or processing time)
-  - *Context Parallelism (CP)*: Use the FlashAttention trick to compute and fuse time-based chunks.
-  - Obviously limited by the size of contexts you are processing.
-
-
-
-// - The cluster setup I have for processing prompts is suboptimal for autoregressive inference.
-//   - *PD-Disaggregation (PD)*: Use seperate clusters for Prefill (processing the prompt) and Decode (inference).
-// 
-// 
-
-// === Sharded Mamtuls
-// + Every accelerator has the full version of both matrices.
-//   $
-//     "In"[N, K] times_K W_"in" [K, M] 
-//   $
-//   Just perform the matmuls locally, no communication needed.
-// + One axis is sharded.
-//   $
-//     "In"[N_X, K] times_K W_"in" [K, M] 
-//   $
-//   Perform an all-gather and then perform the matmuls locally.
-// + The reduction axis is sharded on both. 
-//   $
-//     "In"[N, K_X] times_K W_"in" [K_X, M] 
-//   $
-//   Perform local matmuls and then an all-reduce.
-// + 
