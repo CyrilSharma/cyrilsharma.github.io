@@ -364,12 +364,14 @@ $ O =
    )) V
 $
 
-So, we can see there's only one new row in the matrix, and it can be computed in linear time so long as we held onto the keys and values from before. This optimization is called KV-caching.
+So, we can see there's only one new row in the matrix, and it can be computed in linear time so long as we held onto the keys and values from before. The set of keys and values we've already computed is called the KV-cache. The optimization as a whole is called KV-caching.
 
 Thus, we can essentially get away with computing
 $
   "softmax"(Q_i dot K_0, ..., Q_i dot K_i) V
 $
+
+Intriguingly, this is invariant to arbitrary permutations of the KV cache. This is handy for implementing Sliding Window Attention efficiently (in fact, it even works with SWA + Speculative Decoding). Or even rearranging the KV cache occasionally for contiguous access.
 
 Once again, we can do the FlashAttention trick of "break the problem up into smaller intervals, then merge them" approach, but since we only have one output to produce, we can go all out with our memory budget and compute all chunks in parallel. 
 
@@ -572,22 +574,12 @@ Where ${U_X}$ means we have to sum along the $X$ axis to obtain $C$. The argumen
 Generally, the two equations can be overlayed, but inputs of the form $A[B_X, D_X]$ are not allowed, they don't contain the whole matrix (just a blocked diagonal) so it is not possible to form valid matrix products with them.
 
 If you want to convert your matrix from one form to another, you need communications!
-- All-To-All
-  $ 
-    "All-To-All"_(B, D) A[B_X, D] => A[B, D_X]
-  $
-- All-Gather
-  $ 
-    "All-Gather"_X (A[B_X, D]) => A[B, D]
-  $ 
-- All-Reduce
-  $ 
-    "All-Reduce"_X (A[B, D]{U_X}) => A[B, D]
-  $ 
-- Reduce-Scatter
-  $ 
-    "Reduce-Scatter"_(B) (A[B, D]{U_X}) => A[B_X, D]
-  $ 
+$ 
+  "All-To-All"_(B, D) A[B_X, D] => A[B, D_X] \
+  "All-Gather"_X (A[B_X, D]) => A[B, D] \
+  "All-Reduce"_X (A[B, D]{U_X}) => A[B, D] \
+  "Reduce-Scatter"_(B) (A[B, D]{U_X}) => A[B_X, D]
+$ 
 
 For intuition and implementation of the above primitives see the scaling book.
 
@@ -596,7 +588,7 @@ It's very important to prevent communications from bottlenecking the model's com
 
 The easiest case is where you gather an existing tensor, say a weight tensor or an activation tensor during the BWD. Since you know the tensor in advance, you can dispatch the communication primitive asynchronously allowing it to overlap with model computation.
 
-Sometimes though, you need to gather a tensor which was just made: an activation tensor during the FWD, a gradient tensor during the BWD. Overlap in this case requires more fine-grained cooperation. Let's go through some cases.
+Sometimes though, you need to gather a tensor which was just made: an activation tensor during the FWD, a gradient tensor during the BWD. Overlap in this case requires more fine-grained cooperation. The technique needed is called a Collective GEMM. Let's go through some cases.
 
 All-Gather followed by a GEMM.
 $
@@ -767,6 +759,12 @@ $
 $
 The actual output of this layer will also sum along the $E$ dimension at the end. So anyway, what's the point of this scheme? A much simpler strategy is to use Tensor Parallelism, but TP requires expensive AllGathers and Reduces over the activations, instead of AllToAlls. TP also is limited by the size of $F$. Shard $F$ too much, and you have terrible compute efficiency locally. On the other hand, $E P$ does poor when you have small batches, but the larger the batch you have the more efficiently the expert-local GEMMs become.
 
+== Choosing A Scheme
+Of course you can simply benchmark which configuration works best, but simple models can make the search space easier and indicate where there might be room for improvement. The math is straightforward.
+$
+  T_"forward" in [max(T_"comms", T_"compute", T_"memory"), T_"comms" + T_"compute" + T_"memory"]
+$
+The lower-bound assumes complete overlap, the upper-bound assumes no overlap. Each of the individual quantities can be calculated by looking at the total amount of data being processed, and dividing by the speed at which it can be processed.
 
 // - The cluster setup I have for processing prompts is suboptimal for autoregressive inference.
 //   - *PD-Disaggregation (PD)*: Use seperate clusters for Prefill (processing the prompt) and Decode (inference).
