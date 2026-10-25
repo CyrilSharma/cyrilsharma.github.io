@@ -759,12 +759,31 @@ $
 $
 The actual output of this layer will also sum along the $E$ dimension at the end. So anyway, what's the point of this scheme? A much simpler strategy is to use Tensor Parallelism, but TP requires expensive AllGathers and Reduces over the activations, instead of AllToAlls. TP also is limited by the size of $F$. Shard $F$ too much, and you have terrible compute efficiency locally. On the other hand, $E P$ does poor when you have small batches, but the larger the batch you have the more efficiently the expert-local GEMMs become.
 
+== DWDP
+Use the same reinterpretation as before, but this time we'll solve it differently. 
+$
+  underline(X[B_X, S, E, D] times_D W_"up" [E_X, D, F] times_(F) W_"down" [E_X, F, D] => O[B_X, S, E, D]) \ 
+  "AllGather"(W_"up" [E_X, D, F]) = W_"up" [E, D, F] \ 
+  "AllGather"(W_"down" [E_X, D, F]) = W_"down" [E, D, F] \ 
+  X[B, S_X, E, D] times_D W_"up" [E, D, F] times_(F) W_"down" [E, F, D] = O[B, S_X, E, D]
+$
+
+As usual, you should treat the all-gather followed by the matmul as one fused operation. This will probably be implemented as a ring-reduce of sorts. This is called Distributed Data Weight Parallel, and it becomes appealing when moving the weights has less memory traffic than moving the experts.
+
+It also doesn't require synchronization unlike the Expert Parallelism, e.g. GPU computes its shard independently from the rest. If you pipe this into a scheme like DPA, you actually never need to synchronize between the replicas at all!
+
 == Choosing A Scheme
-Of course you can simply benchmark which configuration works best, but simple models can make the search space easier and indicate where there might be room for improvement. The math is straightforward.
+For fine-grained comparisons of schemes, the math is straightforward.
 $
   T_"forward" in [max(T_"comms", T_"compute", T_"memory"), T_"comms" + T_"compute" + T_"memory"]
 $
 The lower-bound assumes complete overlap, the upper-bound assumes no overlap. Each of the individual quantities can be calculated by looking at the total amount of data being processed, and dividing by the speed at which it can be processed.
+
+If you want _intuition_ for the best scheme, there are a couple of useful axes...
+- How fast is my communication? Data Parallel, DWDP and DPA all have almost no inter-GPU coordination, allowing them to win in regimes where communication is slow.
+- Would I rather be moving _weights_, _activations_, or _both_? TP and 2D Weight Stationary lean keep weights stationary, FSDP and DWDP lead keep activations stationary. You can combine the schemes to smooth the transition between the two regimes.
+- What's my bottleneck? During decode, _memory loading_ is a huge bottleneck. Attention TP over the query heads replicates the KV cache, Context Parallel and Ring Pass-Q don't do this, and so they win in this regime. If networking is your bottleneck, trading uneven data-parallel schemes for communication might be the move. If latency is the problem, try to use TP!
+
 
 // - The cluster setup I have for processing prompts is suboptimal for autoregressive inference.
 //   - *PD-Disaggregation (PD)*: Use seperate clusters for Prefill (processing the prompt) and Decode (inference).
