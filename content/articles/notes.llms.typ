@@ -606,6 +606,12 @@ The easiest case is where you gather an existing tensor, say a weight tensor or 
 
 Sometimes though, you need to gather a tensor which was just made: an activation tensor during the FWD, a gradient tensor during the BWD. Overlap in this case requires more fine-grained cooperation. The technique needed is called a Collective GEMM. Let's go through some cases.
 
+#align(center, image(
+  "../img/collective-gemms.gif",
+  width: 100%,
+  alt: "Animated collective GEMM examples: gather weight slices and compute output columns; stream partial outputs through a ring reduction; reduce input rows before multiplying them; and pull routed batch and sequence chunks for immediate computation.",
+))
+
 All-Gather followed by a GEMM.
 $
  underline(A[B_X, D] times_D B[D, F_X] => C[B_X, F]) \
@@ -737,7 +743,7 @@ $
   Y[B, G, H, S_X, D H]  times_(G, H, D H) W_O [G, H, D H, D] = X[B, S_X, D]
 $
 
-By doing this, we've inherited the advantages and drawbacks of HP, but we've essentially replaced one reduce-scatter with four all-to-alls, which could be a good trade depending on your interconnect and how many GPUs are involved.
+By doing this, we've inherited the advantages and drawbacks of HP, but we've essentially replaced one reduce-scatter with four all-to-alls, which allows our communication costs to _shrink_ as we add more GPUs.
 
 === Mystery Scheme
 Try sharding $B$ and $L$.
@@ -797,7 +803,7 @@ $
 Let's look at how much communication this scheme requires. Denote $bold(X) = |X|$. The total cost is
 $
   approx (2 B S D) / bold(X) + (2 B S F) / bold(Y) =  \
-  2((B S D bold(Y)) / P) + 2((B S F bold(X)) / P) = (2 B S (D Y + F X))/P 
+  (2 B S D bold(Y)) / P + (2 B S F bold(X)) / P = (2 B S (D Y + F X))/P 
 $
 Balancing terms...
 $
@@ -877,10 +883,10 @@ $
 
 So we beat FSDP + TP at small batch sizes, and 2D at large batch sizes, which are the opposite of when each regime is dominant, and so our scheme is never dominant. However, if we replicate $W_"down"$ (removing the all-gather) we end up permanently in the second regime which lets us win at small batch sizes.
 
-What's interesting about all the schemes we have seen before is that they are all optimal in terms of communication volume given _some_ values for $B$, $D$ and $F$, so from a communication standpoint the true optimal algorithm is a hybrid algorithm. It's also worth noting: optimizing for communication volume isn't always the best way of looking at things. Sometimes computation can become the bottleneck due to how the work is distributed, which means really we should be jointly optimizing both and evaluating the schemes with roofline models.
+What's interesting about all the schemes we have seen before is that they are all optimal in terms of communication volume given _some_ values for $B$, $D$ and $F$, so from a communication standpoint the true optimal algorithm is a hybrid algorithm. It's worth noting optimizing for communication volume isn't always the best way of looking at things. Matrix multiplication will scale linearly with respect to both the activations and the weights, so at a large enough batch size it will eclipse the communication costs. Ideally, you only want to use a given scheme only when the computation costs eclipse the communication costs. This gives each scheme a "minimum feasible batch size" which can change which schemes are dominant where.
 
-== MOEs
-MOEs are built out of FFNs, but because they split computation across many experts, sharding either $D$ or $F$ is a lot less appealing. This motivates very different looking parallelism strategies.
+== MOE
+MOEs are built out of FFNs, but they split computation across many experts. This results in a much smaller $F$ dimension (making traditional TP hard) and motivates very different parallelism strategies.
 
 === Expert Parallelism
 Reinterpret the $X$ buffer as telling you for each (Sequence, Expert) pair, what token do you send? In reality, you use Ragged Buffers, this is just a simplification to make it expressible with our syntax.
