@@ -88,7 +88,7 @@
       )
       let reference-par = (leading: par.leading, spacing: par.spacing, justify: false)
       heading(numbering: none, outlined: false)[References]
-      deixis-print-endnotes(body-style: it => {
+      deixis-print-endnotes(clearance: 1em, gap: 0.75em, body-style: it => {
         set text(..reference-text)
         set par(..reference-par)
         it

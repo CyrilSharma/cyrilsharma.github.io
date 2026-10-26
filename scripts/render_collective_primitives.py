@@ -15,7 +15,7 @@ from PIL import Image, ImageDraw, ImageFont
 
 ROOT = Path(__file__).resolve().parents[1]
 OUT = ROOT / "content" / "img"
-W, H, SCALE = 1500, 1240, 2
+W, H, SCALE = 1500, 1150, 2
 BG = "#f3f5f9"
 INK = "#172640"
 MUTED = "#5c6b80"
@@ -30,7 +30,7 @@ if not FONT_REG.exists():
     FONT_BOLD = Path("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf")
 
 FONTS = {}
-PANELS = [(24, 130), (762, 130), (24, 658), (762, 658)]
+PANELS = [(24, 90), (762, 90), (24, 618), (762, 618)]
 PW, PH = 714, 508
 CENTERS = [105, 273, 441, 609]
 CW, CH = 26, 18
@@ -232,11 +232,8 @@ def frame(t):
     im = Image.new("RGB", (W * SCALE, H * SCALE), BG)
     d = ImageDraw.Draw(im)
     text(d, (26, 19), "Four GPU collectives", 40, bold=True)
-    text(d, (28, 75), "P = 4  ·  fully connected network  ·  arrows show direct transfers  ·  reduction = sum", 23, MUTED)
     for op in range(4):
         panel(d, op, t)
-    text(d, (28, 1180), "S = bytes in the full tensor A[B, D]. Costs count sends only; received bytes are equal.", 20, MUTED)
-    text(d, (28, 1210), "Colors track B rows. Faint cells = not held. Exchanges are staged for readability; animation speed is not runtime.", 19, MUTED)
     return im.resize((W, H), Image.Resampling.LANCZOS)
 
 
@@ -276,10 +273,11 @@ def main():
                    duration=durations, loop=0, optimize=True, disposal=1)
     # A contact sheet exposes key intermediate states for visual review.
     times = [0, 2.5, 5.5, 8, 11, 16]
-    contact = Image.new("RGB", (1500, 1240), BG)
+    thumb_w, thumb_h = W // 3, H // 3
+    contact = Image.new("RGB", (W, 2 * thumb_h), BG)
     for i, t in enumerate(times):
-        small = frame(t).resize((500, 413), Image.Resampling.LANCZOS)
-        contact.paste(small, ((i % 3) * 500, (i // 3) * 620 + 35))
+        small = frame(t).resize((thumb_w, thumb_h), Image.Resampling.LANCZOS)
+        contact.paste(small, ((i % 3) * thumb_w, (i // 3) * thumb_h))
     contact.save("/tmp/collective-primitives-contact.png")
     print("Saved {} ({:.2f} MB)".format(target, target.stat().st_size / 1e6))
     print("Duration: {:.2f} seconds".format(sum(durations) / 1000))
