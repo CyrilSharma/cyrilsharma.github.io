@@ -5,7 +5,7 @@
   date: "2026-07-24T18:13:49-04:00",
   tags: ("ml",),
 )
-
+#show: note_page
 
 #import "@preview/fletcher:0.5.8" as fletcher: diagram, node, edge
 #let rise = 0.55
@@ -123,7 +123,7 @@ $
   "Uembed"(H) = H W_U
 $
 
-Some early Transformer models even took $W_U = W_E^top$ which gives an interesting inductive bias: if you want to output a given token, the best way to do that is to make the hidden state very close to the original embedding. be the opposite of the embedding module.
+Some early Transformer models even took $W_U = W_E^top$ which gives an interesting inductive bias: if you want to output a given token, the best way to do that is to make the hidden state very close to the original embedding.
 
 
 
@@ -345,7 +345,7 @@ $
   nabla L(S)_(i j) = A_(i j) dot.o (nabla L(A)_(i j) - nabla L(O)_i dot O_i) \
   nabla L(tilde(Q))_(i) <- nabla L(tilde(Q))_(i) + nabla L(S)_(i j) K_j slash sqrt(d) \
   nabla L(tilde(K))_(j) <- nabla L(tilde(K))_(j) + nabla L(S)^top_(i j) Q_i slash sqrt(d) \
-  nabla L(V)_j <- L(V)_j + A_(i j)^top G_i
+  nabla L(V)_j <- nabla L(V)_j + A_(i j)^top G_i
 $
 
 Where the $nabla L(S)^top_(i j)$ term is the $(i, j)$th sub-block, tranposed, not an index into a tranpose. Interestingly, $nabla L(tilde(Q))$ requires reducing $S$ along a different dimension then $nabla L(tilde(K)), nabla L(tilde(V))$, which either requires two passes or using atomics to reduce along one of the dimensions. This is not a problem you see with the forward.
@@ -472,7 +472,7 @@ With LLMs, one of the easiest ways to improve performance is scaling the number 
 
 You can also make experts which all tokens are routed too, called _shared_ experts, with the thinking being it avoids redundant computation across experts.
 
-= Scaling  (Credits: #link("https://jax-ml.github.io/scaling-book/")[The Jax Scaling Book])
+= Scaling #urlcite("https://jax-ml.github.io/scaling-book/", title: [The Jax Scaling Book])
 When you start making models bigger, you quickly start running into a lot of performance bottlenecks. Your main avenue for addressing them is to somehow share the load across more and more GPUs, but this is non-trivial as naive approaches will bottleneck the model computation on communicating between GPUs. This motivates a lot of interesting parallelism strategies.
 
 - *Data Parallelism (DP)*
@@ -489,14 +489,14 @@ When you start making models bigger, you quickly start running into a lot of per
 - *Context Parallelism (CP)*:
   - Use the FlashAttention trick to process an entire sequence in parallel. Unique to Attention.
 - *Data Parallelism Attention (DPA)*
-  - Run Attention on seperate _sequences_ per GPU. Essentially DP for Attention.
+  - Run Attention on separate _sequences_ per GPU. Essentially DP for Attention.
 - *Head Parallelism (HP)*
   - Run each Attention KV-Head on a different GPU. Sort of like TP, can also implement it like EP.
 
-You can memorize all these, but it's much more powerful to see these as particularly implementations forced by _sharded matrix multiplication_. 
+You can memorize all these, but it's much more powerful to see these as particular implementations forced by _sharded matrix multiplication_.
 
 == Sharded Matmuls
-We are going to organize our GPUs into a _mesh_. A mesh is a conceptual organization of GPUs into a lattice (e.g. a line, a square, a cube), the physically network topology can look very different. Concretely, we will assign to each GPU a tuple of coordinates, which we can use to refer to it. GPUs which share a coordinate are said to live on the same _axis_. 
+We are going to organize our GPUs into a _mesh_. A mesh is a conceptual organization of GPUs into a lattice (e.g. a line, a square, a cube), the physical network topology can look very different. Concretely, we will assign to each GPU a tuple of coordinates, which we can use to refer to it. GPUs which share a coordinate are said to live on the same _axis_.
 
 
 #align(center, diagram(
@@ -553,7 +553,7 @@ Anyway, it's easy to define an algebra using these. Let $A B = C$.
 $ A[B_X, D] times_D B[D, F_Y] = C[B_X, F_Y] $
 The letter under the $times$ symbol indicates the reduction dimensions.
 
-To see this, first subdivide A and B along their reduction dimension.
+To see this, first subdivide A and B along their non-contracting dimensions.
 $
   A = vec(A_1, ..., A_(|X|)) quad B = mat(B_1, ..., B_(|Y|))
 $
@@ -561,7 +561,7 @@ $
 $"GPU"(x, y)$ holds the $x$th entry of the blocked $A$ matrix, and the $y$th entry of the blocked $B$ matrix.
 Blocked Matrix Multiplication tells us 
 $
-  C = A B = mat(A_1 B_1, ..., A_1B_(|X|); ..., ..., ...; A_(|X|) B_1, ...,  A_(|X|) B_(|X|))
+  C = A B = mat(A_1 B_1, ..., A_1 B_(|Y|); ..., ..., ...; A_(|X|) B_1, ...,  A_(|X|) B_(|Y|))
 $
 
 The $(x, y)$th entry of the above matrix corresponds to the $(x, y)$th entry of the blocked $C$. $"GPU"(x, y)$ holds precisely the right shards of $A$ and $B$ to compute this block.
@@ -569,19 +569,35 @@ The $(x, y)$th entry of the above matrix corresponds to the $(x, y)$th entry of 
 The second identity is
 $ A[B, D_X] times_D B[D_X, F] = C[B, F]{U_X} $
 
-Where ${U_X}$ means we have to sum along the $X$ axis to obtain $C$. The argument is similar, except now it you're taking an inner product instead of an outer product.
+Where ${U_X}$ means we have to sum along the $X$ axis to obtain $C$. The argument is similar, except now you're taking an inner product instead of an outer product.
 
 Generally, the two equations can be overlayed, but inputs of the form $A[B_X, D_X]$ are not allowed, they don't contain the whole matrix (just a blocked diagonal) so it is not possible to form valid matrix products with them.
 
-If you want to convert your matrix from one form to another, you need communications!
+Finally, if you want to convert your matrix from one form to another, you need communications!
 $ 
-  "All-To-All"_(B, D) A[B_X, D] => A[B, D_X] \
-  "All-Gather"_X (A[B_X, D]) => A[B, D] \
-  "All-Reduce"_X (A[B, D]{U_X}) => A[B, D] \
-  "Reduce-Scatter"_(B) (A[B, D]{U_X}) => A[B_X, D]
+  "AllToAll"_(B, D) A[B_X, D] => A[B, D_X] \
+  "AllGather"_X (A[B_X, D]) => A[B, D] \
+  "AllReduce"_X (A[B, D]{U_X}) => A[B, D] \
+  "ReduceScatter"_(B) (A[B, D]{U_X}) => A[B_X, D]
 $ 
 
-For intuition and implementation of the above primitives see the scaling book.
+#align(center, image(
+  "../img/collective-primitives.gif",
+  width: 100%,
+  alt: "Animated comparison of AllGather, ReduceScatter, AllReduce, and AllToAll across four fully connected GPUs, showing data transfers, reductions, final layouts, and bytes sent per GPU.",
+))
+
+The speed of these primitives depend on the network topology you are running on. If everything is connected to everything, it's easy to understand their costs. Let $S$ by the number of bytes in $A[B, D]$.
++ $"AllGather"_X (A[B_X, D]) => A[B, D]$ \
+  Communicate your shard to every GPU that's not you. $(S slash P) times (P - 1)$.
++ $"ReduceScatter"_(B) (A[B, D]{U_X}) => A[B_X, D]$ \
+  Collect your shard from every other GPU. $(S slash P) times (P - 1)$.
++ $"AllReduce"_X (A[B, D]{U_X}) => A[B, D]$ \
+  Collect your shard from every other GPU, reduce, then send it to everyone else. $2(S slash P) times (P - 1)$
++ $"AllToAll"_(B, D) A[B_X, D] => A[B, D_X]$ \
+  Break your shard into $P$ pieces. Send each piece to the appropriate GPU. $(S slash P^2) times (P - 1)$
+
+It turns out that even on a _ring topology_ you can still do the first three for the same bandwidth cost, by simply rotating shards around the topology, allowing everyone to reduce or gather as they please. AllToAll becomes a bit more expensive because you end up sending some data to GPUs just for the sake of letting them forward it to other GPUs.
 
 == Overlapping Computation and Comms
 It's very important to prevent communications from bottlenecking the model's computation. If you must use communications, the best way to avoid a bottleneck is to run communications concurrently with computation to avoid ever being in the situation where you just have to run communications. 
@@ -593,45 +609,45 @@ Sometimes though, you need to gather a tensor which was just made: an activation
 All-Gather followed by a GEMM.
 $
  underline(A[B_X, D] times_D B[D, F_X] => C[B_X, F]) \
- - "AllGather"(B[D, F_X]) \
- - A[B_X, D] times_D B[D, F] = C[B_X, F]
+ "AllGather"(B[D, F_X]) \
+ A[B_X, D] times_D B[D, F] = C[B_X, F]
 $
 
-To overlap the all-gather with the computation of $C$, observe gathers are often subdivided into iterations due to bandwidth limitations. Each iteration brings each GPU a new slice of $B$ which it can apply $A$ too. The trick is then to apply $A$ immediately to pieces as they arrive.
+To overlap the all-gather with the computation of $C$, observe gathers are often subdivided into iterations due to bandwidth limitations. Each iteration brings each GPU a new slice of $B$ which it can apply $A$ to. The trick is then to apply $A$ immediately to pieces as they arrive.
 
 GEMM followed by Reduce-Scatter / All-Gather.
 $
  underline(A[B, D_X] times_D B[D_X, F] => C[B_X, F]) \
- - A[B, D_X] times_D B[D_X, F] = C[B, F]{U_X}\
- - "ReduceScatter"(C[B, F]{U_X}) = C[B_X, F]
+ A[B, D_X] times_D B[D_X, F] = C[B, F]{U_X}\
+ "ReduceScatter"(C[B, F]{U_X}) = C[B_X, F]
 $
 To allow overlap, you can subdivide the local computation work into smaller tiles, and begin shuffling the small tiles as soon as they're done, either gathering or reducing them depending on the operation. This is essentially a pipelined ring algorithm.
 
 Reduce-Scatter followed by GEMM.
 $
   underline(A[B, D]{U_X} times_D B[D, F] => C[B_X, F]) \
-  - "ReduceScatter"_B (A[B, D]{U_X}) = A[B_X, D] \
-  - A[B_X, D] times_D B[D, F] = A[B_X, F]
+  "ReduceScatter"_B (A[B, D]{U_X}) = A[B_X, D] \
+  A[B_X, D] times_D B[D, F] = C[B_X, F]
 $
 We again subdivide the computation into tiles. But in this case, you can simply pipeline things such that right before you process your input tile, you've reduced it. 
 
 All-To-All followed by a GEMM.
 $
  underline(A[B, S_X, D] times_D B[D, F] => C[B_X, S, F]) \
- - "AllToAll"(A[B, S_X, D]) = A[B_X, S, D] \
- - A[B_X, S, D] times_D B[D, F] = C[B_X, S, F]\
+ "AllToAll"(A[B, S_X, D]) = A[B_X, S, D] \
+ A[B_X, S, D] times_D B[D, F] = C[B_X, S, F]\
 $
 To overlap, again just process chunks as soon as they arrive. Cursor's MOE kernel allows the GPUs which are receiving data to pull data, instead of the senders just _pushing_ all their data up-front, which enables fine-grained pipelining (e.g. you can issue a network request as soon as you finish computing a GEMM tile). The reverse (GEMM followed by All-To-All) is similar but is led by the sender.
 
 == Parallelism Schemes
-Let's now dig into various operations throughout the Transformer, and see how different choices of sharding and communication force us into different parallelism schemes.
+Before we can parallelize the Transformer, we need a high-level overview of the matmuls involved.
 
 For Attention, ignoring the softmax and normalization, we want to compute
 $
   Q[B, G, H, S, D H] times_(D H) K[B, G, L, D H] times_(L)  V[B, G, L, D H] = Y[B, G, H, S, D H]
 $
 
-That output will be multiplied by the output matrix...
+That output will be multiplied by the output matrix.
 $
   Y[B, G, H, S, D H] times_(G, H, D H) W_O [G, H, D H, D] = X[B, S, D]
 $
@@ -641,13 +657,22 @@ $
   X[B, S, D] times_D W_"up" [D, F] times_F W_"down" [F, D] = O[B, S, D]
 $
 
-And now, $O$ will be used to make $Q, K, V$. They're all pretty similar, let's just look at $Q$.
+Finally, $O$ will be used to make $Q, K, V$. They're all pretty similar, let's just look at $Q$.
 $
-  O[B, S, D] times_D W_Q [D, G, H, S, D H] = Q[B, G, H, S, D H]
+  O[B, S, D] times_D W_Q [D, G, H, D H] = Q[B, G, H, S, D H]
 $
 
-The key point is Attention's parallelism should set stuff up for the FFN, which should set stuff up for Attention (since the blocks are stacked). Now, let's figure out how to divide up the work.
+Now we can consider how to split up work across GPUs. Some questions to keep in mind as we go.
+- If I have to communicate, would I rather be moving _weights_, _activations_, or _both_?
+- What Throughput, Memory, and Latency constraints must my system satisfy?
 
+// Finally, we have our roofline model, which let's us estimate the peak performance of our scheme.
+// $
+//   T_"forward" in [max(T_"comms", T_"compute", T_"memory"), T_"comms" + T_"compute" + T_"memory"]
+// $
+// The lower-bound assumes complete overlap, the upper-bound assumes no overlap. The individual quantities can be calculated by dividing the amount of data we process by the speed we can process it.
+
+== Attention
 === Data-Parallel Attention
 If we split along $B$ we can run attention independently for each batch of sequences
 $
@@ -665,9 +690,11 @@ $
    Y[B, G_X, H, S, D H] times_(G, H, D H) W_O [G_X, H, D H, D] = X[B, S, D]{U_X}
 $
 
-Being able to reduce-scatter into whatever dimensions works best makes this pretty flexible. Another way you could do this is to just replicate $W_O$, and use an AllTAll to get rid of the sharding on $B$.
+Being able to reduce-scatter into whatever dimensions works best makes this pretty flexible. Another way you could do this is to just replicate $W_O$, and use an AllToAll to swap the sharding on $G$ for sharding on $B$.
 
-The main drawback with this approach is you might not have that many groups to shard.
+The main drawback with this approach is you might not have that many groups to shard and the reduce-scatter might require high communication bandwidth.
+
+Its main strength is that unlike data parallel attention this actually lets you finish individual sequences faster, which means way more requests can satisfy a given latency budget.
 
 === Context Parallelism
 Try sharding $S$ and $L$.
@@ -677,61 +704,88 @@ $
   "AllGather"(V[B, G, L_X, D H]) = V[B, G, L, D H] \
   Q[B, G, H, S_X, D H] times_(D H) K[B, G, L, D H] times_(L)  V[B, G, L, D H] => Y[B, G, H, S_X, D H] 
 $
-You can solve this by all-gathering KV but this requires _communicating_ KV across nodes, potentially expensive! Another pretty big drawback with sharding $S$ is that during inference, $S$ is like 1. Therefore, it cannot be sharded, and instead $Q$ would end up replicated across all shards. Note this is the same as Ring Attention, Ring Attention is how we overlap the AllGathers with the communication.
+The main drawback with this approach is it requires _communicating_ KV across GPUs, expensive!
+
+A few things worth noting.
+- During inference, $S = 1$, so you end replicating $Q$.
+- This is the same as Ring and Striped Attention, Ring Attention is how we overlap the AllGathers with the communication. Striped Attention is what you get if you don't give each GPU contiguous KV slices, and instead distribute KVs in a round-robin fashion, which distributes the causal mask savings evenly across the GPUs.
+
+
+The main appeal of this scheme it reduce per-request latency but unlike head parallelism, which can only parallelize as far as the group size, this scheme can continue subdividing so long as $L_X$ is large enough. So, if you want to make a low-latency inference deployment, this is a very appealing option. This can also trivially be combined with head parallelism.
+
+=== Mesh Attention
+Shard $S$ and $L$ along different axis.
+$
+  underline(Q[B, G, H, S_X, D H] times_(D H) K[B, G, L_Y, D H] times_(L)  V[B, G, L_Y, D H] => Y[B, G, H, S_X, D H]) \
+  Q[B, G, H, S_X, D H] times_(D H) K[B, G, L_Y, D H] times_(L)  V[B, G, L_Y, D H] = Y[B, G, H, S_X, D H]{U_Y} \
+  "AllReduce"_Y (Y[B, G, H, S_X, D H]{U_Y}) = Y[B, G, H, S_X, D H]
+$
+There's a smidge more communication needed here than shown above, because you need to communicate normalization statistics. However, you only need to communicate a few scalars per row, so this is not a bottleneck. Note the interesting part about this scheme: _communication does not scale with the KV cache_! However, you do end up having to replicate the KV cache across nodes (which can be done asynchronously) so if memory is a constraint this is more of a problem.
 
 === DeepSpeed-Ulysses
-Again, try sharding $S$ and $L$, but we'll use a slighlty different communication strategy.
+Again, try sharding $S$ and $L$, but we'll use a slightly different communication strategy.
 $
   underline(Q[B, G, H, S_X, D H] times_(D H) K[B, G, L_X, D H] times_(L)  V[B, G, L_X, D H] => Y[B, G, H, S_X, D H]) \
-  "AllToAll"(Q[B, G, H, S_X, D H]) = Q[B, G_X, L, D H] \
+  "AllToAll"(Q[B, G, H, S_X, D H]) = Q[B, G_X, H, S, D H] \
   "AllToAll"(K[B, G, L_X, D H]) = K[B, G_X, L, D H] \
   "AllToAll"(V[B, G, L_X, D H]) = V[B, G_X, L, D H] \
   Q[B, G_X, H, S, D H] times_(D H) K[B, G_X, L, D H] times_(L)  V[B, G_X, L, D H] = Y[B, G_X, H, S, D H]
 $
 Now, instead of doing TP for $W_O$, we can instead use more AllToAlls!
 $
-  "AllToAll"(Y[B, G_X, H, S, D H]) = Y[B_X, G, H, S, D H] \
-  Y[B_X, G, H, S, D H]  times_(G, H, D H) W_O [G_X, H, D H, D] = X[B_X, S, D]
+  "AllToAll"(Y[B, G_X, H, S, D H]) = Y[B, G, H, S_X, D H] \
+  Y[B, G, H, S_X, D H]  times_(G, H, D H) W_O [G, H, D H, D] = X[B, S_X, D]
 $
 
-By doing this, we've essentially traded two all-to-alls for one reduce-scatter, which could actually be a good trade depending on how many GPUs are involved. 
+By doing this, we've inherited the advantages and drawbacks of HP, but we've essentially replaced one reduce-scatter with four all-to-alls, which could be a good trade depending on your interconnect and how many GPUs are involved.
 
-=== No Name Scheme?
+=== Mystery Scheme
 Try sharding $B$ and $L$.
 $
-  underline(Q[B_X, G, H, S, D H] times_(D H) K[B, G, L_X, D H] times_(L)  V[B, G, L_X, D H] => Y[B, G, H, S, D H]{U_X}) \
-  "AllGather"(Q[B_X, G, H, S, D H]) = Q[B_X, G, H, L, D H] \
+  underline(Q[B_X, G, H, S, D H] times_(D H) K[B, G, L_X, D H] times_(L)  V[B, G, L_X, D H] => Y[B_X, G, H, S, D H]) \
+  "AllGather"(Q[B_X, G, H, S, D H]) = Q[B, G, H, S, D H] \
   Q[B, G, H, S, D H] times_(D H) K[B, G, L_X, D H] times_(L)  V[B, G, L_X, D H] = Y[B, G, H, S, D H]{U_X} \
   "ReduceScatter"(Y[B, G, H, S, D H]{U_X}) = Y[B_X, G, H, S, D H]
 $
 
-This is very strange looking, why would you ever want to do this? Well, what if this is inference and the KVs are _large and uneven_. Sharding by batch dimension as data parallelism does would result in some GPUs absorbing a ton of sequence memory and some GPUs absorbing very little. The same load-imbalance could happen for compute too! Well what about Context Parallelism? Context Parallelism will force replication of the queries because $S = 1$, so that's expensive. You cannot naively ring-reduce by moving $Q$ because that would leave several $K$s unpaired. The insight is what if we kept $K V$ in place and then moved $Q$ around using the batch dimension to introduce parallelism where the sequence dimension is lacking. At the end of this process, the KVs will still be on separate GPUs, but they will have received the right normalizing statistics and will have computed everything needed for that tile, so all that remains is a reduction. The advantage is this works like Context-Parallel except you don't need to replicate $Q$.
+This is very strange looking, why would you ever want to do this? Well, what if this is inference and the KVs are _large and uneven_. Sharding by batch dimension as data parallelism does would result in some GPUs absorbing a ton of sequence memory and some GPUs absorbing very little. The same load-imbalance could happen for compute too! Well what about Context Parallelism? Context Parallelism will force replication of the queries because $S = 1$, potentially expensive. You cannot ring-reduce without replicating $Q$ naively. The insight is what if we kept $K V$ in place and then moved $Q$ around using the batch dimension to introduce parallelism where the sequence dimension is lacking. At the end of this process, the KVs will still be on separate GPUs, but (provided we also circulate the normalizing statistics) we will have computed everything needed for that tile, so all that remains is a reduction. The advantage is this works like Context-Parallel except you don't need to replicate $Q$.
 
 Interestingly, I found out Meta also came up with this scheme, calling it Ring Pass-Q.
 
-== FSDP
-Let's now think about the FFN portion. What if we shard the weights and activations along $D$?
+== FFN
+The FFN is a relatively simple operation, but it has a few notable differences from Attention.
+- It can be worthwhile shattering the reduction dimension. You rarely see people do this with Attention because the reduction dimension is already pretty tiny as it is split between the heads.
+- The two consecutive matmuls can have different communication volumes, which makes hybrid sharding more appealing.
+
+=== Data Parallelism
+What if we shard $B$?
 $
-  underline(X[B, S, D] times_D W_"up" [D_X, F] times_F W_"down" [F_X, D] => O[B, S, D]) \
+  X[B_X, S, D] times_D W_"up" [D, F] times_F W_"down" [F, D] = O[B_X, S, D] \
+$
+The main cost of this scheme is being forced to replicate weights. 
+
+=== FSDP
+What if we do data-parallel with batch-sharded activations, but also shard the weights?
+$
+  underline(X[B_X, S, D] times_D W_"up" [D_X, F] times_F W_"down" [F_X, D] => O[B_X, S, D]) \
   "AllGather"(W_"up" [D_X, F]) = W_"up" [D, F] \
-  "AllGather"(W_"down" [D_X, F]) = W_"down" [D, F] \
-  X[B, S, D] times_D W_"up" [D, F] times_F W_"down" [F, D] = O[B, S, D]
+  "AllGather"(W_"down" [F_X, D]) = W_"down" [F, D] \
+  X[B_X, S, D] times_D W_"up" [D, F] times_F W_"down" [F, D] = O[B_X, S, D]
 $
-The cool thing about this scheme is since we are gathering the weights, we can actually do they gathers ahead of time for very little communication overhead. This is an optimization used in ZeRO to reduce Transformer memory usage, they can also perform it on optimizer state and gradients. Not super practical during inference, since loading the weights is a large portion of the bottleneck.
+The main advantage of this scheme is it's essentially data-parallel but with much lower memory usage. The main drawback is we now have to gather the weights. This gives us a communication volume of $approx 2 D F$. However... we can actually do the gathers ahead of time for very little communication overhead. This is one optimization employed by the ZeRO optimizer to reduce Transformer memory usage. You can also do a similar trick with optimizer state and gradients. It's not very good during inference, since inference is usually memory bound and loading the weights is a large portion of the bottleneck.
 
-Another approach (not what FSDP does) would be to all-reduce the activations after multiplying with the first matmul. This might be appealing if the activations are much smaller than the weights (a function of your batch size).
 
-== Tensor Parallelism
+=== Tensor Parallelism
 What if we shard the weights along $F$?
 $
-  underline(X[B, S, D] times_D W_"up" [D, F_X] times_F W_"down" [F_X, D] => O[B_X, S, D]) \
+  underline(X[B, S, D] times_D W_"up" [D, F_X] times_F W_"down" [F_X, D] => O[B, S, D]) \
   X[B, S, D] times_D W_"up" [D, F_X] times_F W_"down" [F_X, D] = O[B, S, D]{U_X} \
   "AllReduce"(O[B, S, D]{U_X}) = O[B, S, D]
 $
-Unlike the previous scheme, which was mainly there for memory savings, here we've asymptotically reduced the work by splitting it across the GPUs, and wee've switched from doing communication over the weights to doing communication over the activations. 
+Unlike the previous scheme, which was mainly there for memory savings, here we've asymptotically reduced the work by splitting it across the GPUs, and we've switched from doing communication over the weights to doing communication over the activations. Our communication volume is $approx 2 B S D$.
 
-== 2D Weight Stationary
-What if we shard the weights along $F$ and $D$?
+=== 2D Weight Stationary
+What if we shard the weights along $F$ and $D$, but keep the weights stationary?
 $
   underline(X[B, S, D_(X Y)] times_D W_"up" [D_X, F_Y] times_F W_"down" [F_Y, D_X] => O[B, S, D_(X Y)]) \
   "AllGather"_(Y)(X[B, S, D_(X Y)]) = X[B, S, D_X]\
@@ -740,73 +794,118 @@ $
   A[B, S, F_Y] times_F W_"down" [F_Y, D_X] = O[B, S, D_X]{U_Y} \
   "ReduceScatter"_Y (O[B, S, D_X]{U_Y}) = O[B, S, D_(X Y)]
 $
-Just like the previous scheme, we're moving activations around, hence "Weight Stationary". This requires more communication then TP but less computation, so this can be a dominant scheme for moderate batch sizes. See #link("https://arxiv.org/abs/2211.05102")[this paper] for a more detailed analysis for when it wins.
+Let's look at how much communication this scheme requires. Denote $bold(X) = |X|$. The total cost is
+$
+  approx (2 B S D) / bold(X) + (2 B S F) / bold(Y) =  \
+  2((B S D bold(Y)) / P) + 2((B S F bold(X)) / P) = (2 B S (D Y + F X))/P 
+$
+Balancing terms...
+$
+  D Y = F X => (D P) / X = F X => X = sqrt((D P) / F)
+$
 
-== Data Parallelism
-What if we shard $B$?
+For a total communication volume of...
 $
-  X[B_X, S, D] times_D W_"up" [D, F] times_F W_"down" [F, D] = O[B_X, S, D] \
+  approx (4 B S sqrt(D F)) / sqrt(P) 
 $
-The main cost of this scheme is being forced to replicate weights. 
+Intriguingly, this becomes more efficient the more GPUs you have, which is not a property our implementation of TP has. Thus, the scheme is asymptotically more efficient than TP. See #link("https://arxiv.org/abs/2211.05102")[this paper] for a more detailed analysis of this algorithm.
 
-== Expert Parallelism
-Reinterpret the $X$ buffer as telling you for each (Sequence, Expert) pair, what token do you send? In reality you use Ragged Buffers, this is just a simplification to make it expressible with our syntax.
+=== TP + FSDP
+This is pretty similar to 2D weight stationary, except this time we're ok with moving both the activations and the weights around.
 $
-  underline(X[B, S_X, E, D] times_D W_"up" [E, D, F] times_(F) W_"down" [E, F, D] => O[B, S_X, E, D]) \ 
+  underline(X[B_X, S, D] times_D W_"up" [D_X, F_Y] times_F W_"down" [F_Y, D_X] => O[B_X, S, D]) \
+  "AllGather"_(X)(W_"up" [D_X, F_Y]) = W_"up" [D, F_Y]\
+  "AllGather"_(X)(W_"down" [F_Y, D_X]) = W_"down" [F_Y, D]\
+  X[B_X, S, D] times_D W_"up" [D, F_Y] = A[B_X, S, F_Y]\
+  A[B_X, S, F_Y] times_F W_"down" [F_Y, D] = O[B_X, S, D]{U_Y} \
+  "AllReduce"_Y (O[B_X, S, D]{U_Y}) = O[B_X, S, D] 
+$
+
+This time the communication volume is 
+$
+  approx  (2 D F)/bold(Y) + (2 B S D)/bold(X)
+$
+
+Balancing terms and solving...
+$
+  F / bold(Y) = (B S) / bold(X) => bold(X) = (B S bold(Y))/F quad => bold(X) = sqrt((B S P) / F) \ 
+  "Comms" = (4 D sqrt(B S F)) / sqrt(P)
+$
+
+Compared to the previous method we have a square-root dependence on $B S$ and a linear dependence on $D$, instead of a square-root dependence on $D$ and a linear dependence on $B S$. Thus, this method will ultimately win as batch sizes grow. 
+
+Why did this happen? Well, previously we were balancing communications just between activations, and all the activations scale linearly with the batch size, so the communication volume did as well. Here, we balance communications between something that scales with the batch size and something that scales with the weights, which allowed us to scale sub-linearly with respect to the batch size. 
+
+=== Mystery Scheme
+Take the contract of FSDP, and solve it a bit differently.
+$
+  underline(X[B_X, S, D] times_D W_"up" [D_X, F_Y] times_F W_"down" [F_Y, D_X] => O[B_X, S, D]) \
+  "AllToAll"_(X)(X[B_X, S, D]) = X[B, S, D_X]\
+  "AllGather"_(X)(W_"down" [F_Y, D_X]) = W_"down" [F_Y, D]\
+  X[B, S, D_X] times_D W_"up" [D_X, F_Y] = A[B, S, F_Y]{U_X}\
+  "ReduceScatter"(A[B, S, F_Y]{U_X}) = A[B_X, S, F_Y]\
+  A[B_X, S, F_Y] times_F W_"down" [F_Y, D] = O[B_X, S, D]{U_Y} \
+  "AllReduce"_Y (O[B_X, S, D]{U_Y}) = O[B_X, S, D] 
+$
+
+Communication Volume:
+$
+  (B S D) / bold(X) + (D F) / bold(Y) + (B S F) / bold(Y) + (2 B S D) / bold(X) = \
+  (3 B S D) / bold(X) + (D F + B S F) / bold(Y)
+$
+
+Balancing Terms
+$
+  (3 B S D) / bold(X) = (D F + B S F) / bold(Y) => (3 B S D) bold(Y) = (D F + B S F) bold(X) \
+  bold(X) = sqrt((3 B S D)/(D F + B S F) P)
+$
+
+So we obtain...
+$
+  (2 sqrt(3) sqrt(B S D (D F + B S F))) / sqrt(P)
+$
+
+For small batch size the first term dominates
+$
+  approx (2 sqrt(3) D sqrt(B S F)) / sqrt(P) 
+$
+
+For large batch size the second term dominates
+$
+ approx (2 sqrt(3) B S sqrt(D F)) / sqrt(P)    
+$
+
+So we beat FSDP + TP at small batch sizes, and 2D at large batch sizes, which are the opposite of when each regime is dominant, and so our scheme is never dominant. However, if we replicate $W_"down"$ (removing the all-gather) we end up permanently in the second regime which lets us win at small batch sizes.
+
+What's interesting about all the schemes we have seen before is that they are all optimal in terms of communication volume given _some_ values for $B$, $D$ and $F$, so from a communication standpoint the true optimal algorithm is a hybrid algorithm. It's also worth noting: optimizing for communication volume isn't always the best way of looking at things. Sometimes computation can become the bottleneck due to how the work is distributed, which means really we should be jointly optimizing both and evaluating the schemes with roofline models.
+
+== MOEs
+MOEs are built out of FFNs, but because they split computation across many experts, sharding either $D$ or $F$ is a lot less appealing. This motivates very different looking parallelism strategies.
+
+=== Expert Parallelism
+Reinterpret the $X$ buffer as telling you for each (Sequence, Expert) pair, what token do you send? In reality, you use Ragged Buffers, this is just a simplification to make it expressible with our syntax.
+$
+  underline(X[B, S_X, E, D] times_D W_"up" [E, D, F] times_(F) W_"down" [E, F, D] => O[B, S_X, D]) \ 
   "AllToAll"(X[B, S_X, E, D]) = X[B, S, E_X, D] \ 
   X[B, S, E_X, D] times_D W_"up" [E_X, D, F] times_(F) W_"down" [E_X, F, D] = O[B, S, E_X, D] \
-  "AllToAll"(X[B, S, E_X, D]) = X[B, S_X, E, D] 
+  "AllToAll"(O[B, S, E_X, D]) = O[B, S_X, E, D] \
+  sum_E O[B, S_X, E, D] = O[B, S_X, D]
 $
-The actual output of this layer will also sum along the $E$ dimension at the end. So anyway, what's the point of this scheme? A much simpler strategy is to use Tensor Parallelism, but TP requires expensive AllGathers and Reduces over the activations, instead of AllToAlls. TP also is limited by the size of $F$. Shard $F$ too much, and you have terrible compute efficiency locally. On the other hand, $E P$ does poor when you have small batches, but the larger the batch you have the more efficiently the expert-local GEMMs become.
+What's the point of this scheme? A much simpler strategy is to use Tensor Parallelism, but TP shards a (typically much smaller) reduction dimension, leading to poor utilization. TP also requires AllGathers and ReduceScatters over the activations, which is more expensive than AllToAlls. On the other hand, $E P$ does poor when you have small batches, but the larger the batch you have the more efficiently the expert-local GEMMs become.
 
-== DWDP
+=== Distributed Weight Data Parallelism
 Use the same reinterpretation as before, but this time we'll solve it differently. 
 $
-  underline(X[B_X, S, E, D] times_D W_"up" [E_X, D, F] times_(F) W_"down" [E_X, F, D] => O[B_X, S, E, D]) \ 
+  underline(X[B_X, S, E, D] times_D W_"up" [E_X, D, F] times_(F) W_"down" [E_X, F, D] => O[B_X, S, D]) \
   "AllGather"(W_"up" [E_X, D, F]) = W_"up" [E, D, F] \ 
-  "AllGather"(W_"down" [E_X, D, F]) = W_"down" [E, D, F] \ 
-  X[B, S_X, E, D] times_D W_"up" [E, D, F] times_(F) W_"down" [E, F, D] = O[B, S_X, E, D]
+  "AllGather"(W_"down" [E_X, F, D]) = W_"down" [E, F, D] \
+  X[B_X, S, E, D] times_D W_"up" [E, D, F] times_(F) W_"down" [E, F, D] = O[B_X, S, E, D] \
+  sum_E O[B_X, S, E, D] = O[B_X, S, D]
 $
 
-As usual, you should treat the all-gather followed by the matmul as one fused operation. This will probably be implemented as a ring-reduce of sorts. This is called Distributed Data Weight Parallel, and it becomes appealing when moving the weights has less memory traffic than moving the experts.
+As usual, you should treat the all-gather followed by the matmul as one fused operation.
 
-It also doesn't require synchronization unlike the Expert Parallelism, e.g. GPU computes its shard independently from the rest. If you pipe this into a scheme like DPA, you actually never need to synchronize between the replicas at all!
-
-== Choosing A Scheme
-For fine-grained comparisons of schemes, the math is straightforward.
-$
-  T_"forward" in [max(T_"comms", T_"compute", T_"memory"), T_"comms" + T_"compute" + T_"memory"]
-$
-The lower-bound assumes complete overlap, the upper-bound assumes no overlap. Each of the individual quantities can be calculated by looking at the total amount of data being processed, and dividing by the speed at which it can be processed.
-
-If you want _intuition_ for the best scheme, there are a couple of useful axes...
-- How fast is my communication? Data Parallel, DWDP and DPA all have almost no inter-GPU coordination, allowing them to win in regimes where communication is slow.
-- Would I rather be moving _weights_, _activations_, or _both_? TP and 2D Weight Stationary lean keep weights stationary, FSDP and DWDP lead keep activations stationary. You can combine the schemes to smooth the transition between the two regimes.
-- What's my bottleneck? During decode, _memory loading_ is a huge bottleneck. Attention TP over the query heads replicates the KV cache, Context Parallel and Ring Pass-Q don't do this, and so they win in this regime. If networking is your bottleneck, trading uneven data-parallel schemes for communication might be the move. If latency is the problem, try to use TP!
-
-
-// - The cluster setup I have for processing prompts is suboptimal for autoregressive inference.
-//   - *PD-Disaggregation (PD)*: Use seperate clusters for Prefill (processing the prompt) and Decode (inference).
-// 
-// 
-
-// === Sharded Mamtuls
-// + Every accelerator has the full version of both matrices.
-//   $
-//     "In"[N, K] times_K W_"in" [K, M] 
-//   $
-//   Just perform the matmuls locally, no communication needed.
-// + One axis is sharded.
-//   $
-//     "In"[N_X, K] times_K W_"in" [K, M] 
-//   $
-//   Perform an all-gather and then perform the matmuls locally.
-// + The reduction axis is sharded on both. 
-//   $
-//     "In"[N, K_X] times_K W_"in" [K_X, M] 
-//   $
-//   Perform local matmuls and then an all-reduce.
-// + 
+This becomes advantageous relative to EP when moving the weights has less memory traffic than moving the activations. It also doesn't require synchronization unlike the Expert Parallelism, e.g. each GPU computes its shard independently from the rest. If you pipe this into a scheme like DPA, you actually never need to synchronize between the replicas at all!
 
 = Theory
 
@@ -943,7 +1042,7 @@ I'll update this section with *Post-Layer Norm* and some other ideas when I unde
 // // TODO: THIS IS REALLY NOT CLEAR (but I think a decent way of viewing this)
 // Where $A$ is the overall layerwise attention matrix. From this analysis, it becomes clear that the gradient grows exponentially with depth for pre-norm, but only linearly for Residual Attention.
 
-== Critical Batch Size (Credits: #link("https://arxiv.org/pdf/1812.06162")[An Empirical Model of Large-Batch Training])
+== Critical Batch Size #urlcite("https://arxiv.org/pdf/1812.06162", title: [An Empirical Model of Large-Batch Training])
 The goal here is to try and derive from first principles what the optimal batch size should be. Assume that our loss is well-approximated locally by its second order Taylor expansion and let $G$ and $H$ indicate the true values of the gradient and hessian at $theta_0$. With step size $eta$ we have...
 $
   L(theta) = L(theta_0) + eta G^top (-G) + eta^2/2 G^top H G + O(eta^3)

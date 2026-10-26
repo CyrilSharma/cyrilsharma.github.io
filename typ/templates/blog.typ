@@ -1,8 +1,14 @@
 #import "@preview/cetz:0.4.2"
+#import "@preview/deixis:0.2.0": deixis-setup-notes, deixis-endnote, deixis-print-endnotes, deixis-query-notes
 #import "/typ/templates/utils.typ": *
 #import "/typ/templates/notes.typ": *
 
 #let sys-is-html-target = ("target" in dictionary(std))
+
+// URL citations are collected automatically in the article's References.
+#let urlcite(url, title: auto) = deixis-endnote[
+  #if title == auto { link(url) } else { link(url, title) }
+]
 
 #let author = "Cyril Sharma"
 #set heading(numbering: "1.1.")
@@ -15,6 +21,8 @@
   tags: [],
   body,
 ) = {
+  show: deixis-setup-notes
+
   // set basic document metadata
   set document(
     author: (author),
@@ -69,5 +77,22 @@
   // Main body.
   set par(justify: true)
 
-  html_rules[#body]
+  html_rules[
+    #body
+    #context if deixis-query-notes(include-types: "endnote").len() > 0 {
+      // Deixis preserves each note's declaration styles. Restore the article
+      // body style so notes from headings, bold, or italics match one another.
+      let reference-text = (
+        size: text.size, font: text.font, fill: text.fill,
+        weight: "regular", style: "normal",
+      )
+      let reference-par = (leading: par.leading, spacing: par.spacing, justify: false)
+      heading(numbering: none, outlined: false)[References]
+      deixis-print-endnotes(body-style: it => {
+        set text(..reference-text)
+        set par(..reference-par)
+        it
+      })
+    }
+  ]
 }
