@@ -444,6 +444,27 @@ sup a:hover {
   text-decoration: underline !important;
 }
 
+/* Deixis endnotes: compact references with hanging numbers. */
+.prose ol.deixis-notes {
+  margin: 1rem 0;
+  padding: 0;
+  font-size: 0.9em;
+  line-height: 1.6;
+}
+
+.prose ol.deixis-notes > li {
+  margin: 0.5em 0;
+  padding-left: 1.5em;
+  text-indent: -1.5em;
+}
+
+.prose ol.deixis-notes > li > a:first-of-type {
+  display: inline-block;
+  min-width: 1.5em;
+  font-variant-numeric: tabular-nums;
+  text-indent: 0;
+}
+
 .prose pre {
     padding: 0em;
     border-radius: 8px;

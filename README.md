@@ -15,6 +15,18 @@ All commands are run from the root of the project, from a terminal:
 | `pnpm astro ...`       | Run CLI commands like `astro add`, `astro check` |
 | `pnpm astro -- --help` | Get help using the Astro CLI                     |
 
+## Typst and URL citations
+
+Use Typst 0.15.0 or newer; the shared template uses Deixis 0.2.0.
+With Homebrew, run `brew upgrade typst` to update an older installation.
+
+Articles that import the shared blog template can cite a URL with
+`#urlcite("https://example.com/paper")`, or supply a readable title with
+`#urlcite("https://example.com/paper", title: [Paper title])`.
+The template collects these citations into a References section at the end.
+Articles without endnotes do not get an empty References section. Ordinary
+Typst footnotes remain available for explanatory notes.
+
 ## Editor Setup
 
 ### VS Code
