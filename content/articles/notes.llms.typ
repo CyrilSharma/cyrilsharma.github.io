@@ -92,12 +92,12 @@ The architecture of a prototypical LLM is actually remarkably simple.
 )))
 
 == Tokenization
-The first thing that happens when you query an LLM is the text gets split into small pieces of text called tokens. These "pieces" are not _words_, but both words and tokens can be considered groups of bytes.
+The first thing that happens when you query an LLM is the text gets split into small groups of bytes called tokens. These "pieces" are typically a bit longer then characters but a bit shorter than words.
 
-+ Why are we using words at all, why not just use characters?
++ Why use tokens instead of characters?
   - As we will later see, Attention takes $O(T^2)$ time to process a sequence of length $T$. Thus, reducing the length of the sequence it processes is a useful optimization.
   - There's also this intuition that the _unit_ of attention should be semantically meaningful. If you treat attention as a key-value lookup system, it makes sense that being able to search via a semantically meaningful "word-esque" thing is more powerful then being able to search by character.
-+ Why tokens instead of words?
++ Why use tokens instead of words?
   - We can tightly control the number of unique tokens, whereas the number of words is large and out of our control. This is important, because an essential piece of training LLMs is being able to fully model a distribution over their outputs.
   - Any piece of language (even things like ascii art!) can be split into tokens, whereas only clean, typo-free, language can be split into words.
 
@@ -144,7 +144,7 @@ The purpose of $L$ is to constrain which _inputs_ have effects on which _outputs
 
 To see why this is important, consider a typical training objective: predict the next token. Concretely, given a sequence of tokens $S_1, ..., S_t$, you want the model to output $S_2, ..., S_(t + 1)$. Now, the idea of this objective is if you can predict the next token, _without actually being shown the next token_ then you have a pretty good understanding of language. Obviously, the objective is undermined if the model is able to make the $i$th output depend on the $i$th input, so you'll want to choose $L$ accordingly.
 
-Typically, we'll choose the mask to ensure the $i$th output is only a function of the first $< i$ inputs. This enables autoregressive decoding, discussed later.
+Typically, we'll choose the mask to ensure the $i$th output is only a function of the first $<= i$ inputs. This enables autoregressive decoding, discussed later.
 
 === RoPE
 RoPE is an operator designed to break the permutation equivariance of attention. To be more concrete, the problem is without RoPE the following is true (ignoring the causal mask).
@@ -167,7 +167,7 @@ Thus, RoPE adds a _relative-position sensitive_ adjustment to the dot-product br
 - You can rely on the causal mask to break permutation equivariance, which _can_ work but provides no helpful learning bias to the model (RoPE implicitly upweights attention on nearby words).
 
 === Attention Heads
-People have played around a lot with the Attention operator, and there are many variants. The version described above is known as Single Head Attention. I won't describe every variant, but it is very important to know the concept of an _attention head_. An _attention head_ essentially takes a slice of X across its $D$ dimension, and then process this "lower-dimensional" sequence with Single Head Attention. To combine the results of multiple heads, you combine the head outputs along the $D$ dimension, the reverse of the original split. Empirically, having heads gives a slight expressivity gain with the rough intuition being you can use different attention mixers for different input dimensions, for the same amount of compute.
+People have played around a lot with the Attention operator, and there are many variants. The version described above is known as Single Head Attention. I won't describe every variant, but it is very important to know the concept of an _attention head_. An _attention head_ essentially takes a slice of Q, K, V across their $D$ dimension, and then processes this with Single Head Attention. To combine the results of multiple heads, you combine the head outputs along the $D$ dimension, the reverse of the original split. Empirically, having heads gives a slight expressivity gain with the rough intuition being you can use different attention mixers for different input dimensions, for the same amount of compute.
 
 
 === FlashAttention
@@ -240,7 +240,7 @@ Incrementally merge chunks using FlashAttention and boom! You've successfully re
 I'll slightly rephrase the defintion to make the proof slicker.
 $
   Q = X W_Q quad K = X W_K quad V = X W_V \
-  tilde(Q) = "RoPE"(Q) quad tilde(V) = "RoPE"(V) \
+  tilde(Q) = "RoPE"(Q) quad tilde(K) = "RoPE"(K) \
   S = (tilde(Q) tilde(K)^top + L)/sqrt(d) quad A = "softmax"(S)  quad O = A V
 $
 Now assume we know $nabla L(O)$. We immediately have
@@ -354,7 +354,7 @@ Where the $nabla L(S)^top_(i j)$ term is the $(i, j)$th sub-block, tranposed, no
 This is very similar to before. Look at the above algorithm. Anything with the $i$ index is not rotated, everything with just the $j$ index is. We perform $T$ iterations, and it's easy to see that every combo $(i, j)$ is encountered, so every term gets computed. Notice that we have two new terms to rotate, the $nabla L(tilde(K)_j)$ and $nabla L(tilde(V)_j)$ terms. 
 
 === Inference
-Suppose I want to compute Attention over $X'$ where $X' = "cat"(X, X_t)$. This is commonly needed during autoregressive generation where you extend the input sequence by the last token the model outputted. Turns out a lot of the previous computation can be re-used to make this faster then $O(T^2)$. Under causal masking (e.g. the query at $i$ cannot interact with keys for $j >= i$) and ignoring normalization...
+Suppose I want to compute Attention over $X'$ where $X' = "cat"(X, X_t)$. This is commonly needed during autoregressive generation where you extend the input sequence by the last token the model outputted. Turns out a lot of the previous computation can be re-used to make this faster then $O(T^2)$. Under causal masking (e.g. the query at $i$ cannot interact with keys for $j > i$) and ignoring normalization...
 $ O =
   "softmax"(mat(
     Q_0 dot K_0, 0, ...;
@@ -432,7 +432,7 @@ $
   "FFN FLOPs" - "ATTN FLOPs" = 16 B S D^2 - 2 B S^2 D
 $
 
-So $S > 8 D$ in order for attention to dominate. This is interesting. For larger models, which typically have higher $D$, let's $D approx 10k$, this corresponds to pretty large sequences on the  order of $80k$ elements. During Pre-Training you usually use much smaller sequences, during Inference at long contexts such lengths are more likely. However, if you are serving a smaller model, or a model with a more expensive attention mechanism, the tipping point can come way earlier, 
+So $S > 8 D$ in order for attention to dominate. This is interesting. For larger models, which typically have higher $D$, let's say $D approx 10k$, this corresponds to pretty large sequences on the order of $80k$ elements. During Pre-Training you usually use much smaller sequences, during Inference at long contexts such lengths are more likely. However, if you are serving a smaller model, or a model with a more expensive attention mechanism, the tipping point can come way earlier.
 
 === MOEs
 With LLMs, one of the easiest ways to improve performance is scaling the number of parameters. However, increasing the number of parameters often correspondingly increases the amount of compute you end up doing! MOEs can be thought of as work-around. In a nutshell, they let you train a large number of FFNs (defined the same way as above) called _experts_. During training and inference, only a subset of these experts fire, decoupling compute from parameters. A _router_ is used to choose which experts to send the token too, it's usually something like a linear mapping following by Top-K.
@@ -743,7 +743,7 @@ $
   Y[B, G, H, S_X, D H]  times_(G, H, D H) W_O [G, H, D H, D] = X[B, S_X, D]
 $
 
-By doing this, we've inherited the advantages and drawbacks of HP, but we've essentially replaced one reduce-scatter with four all-to-alls, which allows our communication costs to _shrink_ as we add more GPUs.
+By doing this, we've inherited the advantages and drawbacks of HP, but we've essentially replaced one reduce-scatter with four all-to-alls, which allows our communication costs to _shrink_ as we add more GPUs. One more optimization: during inference, you only need to compute the latest KV, and the pre-existing KVs will can live on their respective shards. This makes the communication overhead as if $L_X = S_X$, a big win!
 
 === Mystery Scheme
 Try sharding $B$ and $L$.
@@ -912,6 +912,10 @@ $
 As usual, you should treat the all-gather followed by the matmul as one fused operation.
 
 This becomes advantageous relative to EP when moving the weights has less memory traffic than moving the activations. It also doesn't require synchronization unlike the Expert Parallelism, e.g. each GPU computes its shard independently from the rest. If you pipe this into a scheme like DPA, you actually never need to synchronize between the replicas at all!
+
+// TODO: = Serving
+// PD-Disagg, Attn-FFN disagg? Continuous-Batching, Chunked Prefill, Chunked Pipeline Parallelism, 
+// KV-cache radix / hash stratagies. Tiered caching with per-layer onload and offload, Attention Striping. 
 
 = Theory
 
