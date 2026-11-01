@@ -1,3 +1,5 @@
+#import "@preview/cetz:0.4.2" as cetz
+
 // Native Typst diagrams for the serving notes. Kept separate from the prose.
 #let ink = rgb("263546")
 #let muted = rgb("627083")
@@ -181,3 +183,79 @@
   grid(columns: (102pt, 1fr), gutter: 7pt, align: horizon,
     [Output], tiles(([a], [b], [z]), fill: token, width: 60pt)),
 ), caption: [The target evaluates proposed contexts in one pass. Keep the matching prefix and the target's first differing token; discard the remaining proposals.])
+
+#let speculative-split() = {
+  let target-color = rgb("3476ad")
+  let draft-color = rgb("8a61ad")
+  let accepted-color = rgb("438c72")
+  let cut = 0.4
+  let mass = 3 * cut * cut - 2 * cut * cut * cut
+  // Both densities integrate to one. The perturbation is zero on T and
+  // integrates to zero on its complement, so both assign mass C to T.
+  let p(x) = 6 * x * (1 - x)
+  let q(x) = if x <= cut { p(x) } else {
+    let t = (x - cut) / (1 - cut)
+    p(x) + 5 * t * (1 - t) * (2 * t - 1)
+  }
+  let plot(part: "overlay", width: 374, height: 88, ymax: 1.7) = cetz.canvas(length: 1pt, {
+    import cetz.draw: line, content
+    let points(f, lo: 0, hi: 1) = range(161).map(i => {
+      let x = lo + (hi - lo) * i / 160
+      (width * x, height * f(x) / ymax)
+    })
+    let area(pts, lo, hi, fill) = line(
+      (width * lo, 0), ..pts, (width * hi, 0),
+      close: true, fill: fill, stroke: none,
+    )
+    if part == "overlay" {
+      area(points(p, hi: cut), 0, cut, token)
+      area(points(p, lo: cut), cut, 1, cache)
+      line(..points(p), stroke: (paint: target-color, thickness: 1.5pt))
+      line(..points(q), stroke: (paint: draft-color, thickness: 1.4pt, dash: "dashed"))
+    } else if part == "accept" {
+      let pts = points(x => q(x) / mass, hi: cut)
+      area(pts, 0, cut, token)
+      line((0, 0), ..pts, (width * cut, 0),
+        stroke: (paint: accepted-color, thickness: 1.4pt))
+    } else {
+      let pts = points(x => p(x) / (1 - mass), lo: cut)
+      area(pts, cut, 1, cache)
+      line((width * cut, 0), ..pts, (width, 0),
+        stroke: (paint: target-color, thickness: 1.4pt))
+    }
+    line((0, 0), (0, height + 3), stroke: 0.55pt + muted)
+    line((0, 0), (width + 4, 0), stroke: 0.55pt + muted)
+    line((width * cut, 0), (width * cut, height + 3),
+      stroke: (paint: muted, thickness: 0.55pt, dash: "dotted"))
+    content((width * cut / 2, -5), text(8pt, fill: muted)[$T$], anchor: "north")
+    content((width * (1 + cut) / 2, -5), text(8pt, fill: muted)[$T^c$], anchor: "north")
+    content((width + 6, 0), text(8pt, fill: muted)[$x$], anchor: "west")
+  })
+  panel([Attempt 3 · split off the matching region], stack(
+    dir: ttb, spacing: 11pt,
+    align(center, stack(dir: ltr, spacing: 18pt,
+      stack(dir: ltr, spacing: 5pt,
+        box(width: 18pt, height: 9pt, align(horizon,
+          std.line(length: 18pt, stroke: 1.5pt + target-color))), [Target $p$]),
+      stack(dir: ltr, spacing: 5pt,
+        box(width: 18pt, height: 9pt, align(horizon,
+          std.line(length: 18pt, stroke: (paint: draft-color, thickness: 1.4pt, dash: "dashed")))), [Draft $q$]),
+    )),
+    align(center, plot()),
+    down,
+    grid(columns: (194pt, 194pt), column-gutter: 12pt, align: top,
+      stack(dir: ttb, spacing: 7pt,
+        text(weight: "semibold")[Accept · probability $C$],
+        [$q_T (x) = q(x) 1_T (x) slash C$],
+        plot(part: "accept", width: 170, height: 66, ymax: 4.5),
+      ),
+      stack(dir: ttb, spacing: 7pt,
+        text(weight: "semibold")[Fallback · probability $1 - C$],
+        [$p_(T^c) (x) = p(x) 1_(T^c) (x) slash (1 - C)$],
+        plot(part: "fallback", width: 170, height: 66, ymax: 4.5),
+      ),
+    ),
+    // align(center, text(8pt, fill: muted)[Each conditional distribution has area $1$.]),
+    // align(center, [$C q_T (x) + (1 - C) p_(T^c) (x) = p(x)$]),
+  )) //, caption: [The fallback has zero mass on $T$, so it cannot count the shared region twice.])
+}

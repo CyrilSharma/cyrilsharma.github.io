@@ -1017,14 +1017,16 @@ That being said, there are ways to make PD more elastic.
 - You can run chunked prefill on the separate workers, but with a twist, workers in the prefill configuration will be allowed to process more prefill chunks at a time while workers on the decode configuration will have a lower cap. The main advantage with this scheme is that the number of prefill chunks you are allowed to process can be changed super easily!
 
 == Multi-Token Prediction
-We observed at the beginning of this section that because we are only outputting a single token at a time, the attention operation is inherently inefficient. What if we could output more than one token at a time? Indeed, there are some architectures which allow for this but these aren't my focus here. #urlcite("https://arxiv.org/abs/2404.19737", title: [Better & Faster Large Language Models via Multi-token Prediction]) Instead, I'm going to talk about a family of techniques that work on pretty much _any_ architecture. #urlcite("https://arxiv.org/abs/2211.17192", title: [Fast Inference from Transformers via Speculative Decoding])
+We observed at the beginning of this section that because we are only outputting a single token at a time, the attention operation is inherently inefficient. What if we could output more than one token at a time? Not only does this make the Attention operation more efficient, but it also reduces the number of forward passes we need which reduces _memory bandwidth_ (but not flops!).
+
+Indeed, there are some architectures which allow for this but these aren't my focus here. #urlcite("https://arxiv.org/abs/2404.19737", title: [Better & Faster Large Language Models via Multi-token Prediction]) Instead, I'm going to talk about a family of techniques that work on pretty much _any_ architecture. #urlcite("https://arxiv.org/abs/2211.17192", title: [Fast Inference from Transformers via Speculative Decoding])
 
 This is a little complicated to explain, so we're going to work up to it with a few ideas that don't work.
 
 === Attempt 1
 #align(center, graphic(serving.speculative-attempt()))
 
-Append $K$ random tokens to the _target_ model's context. Evaluate the _target_ on the new context, to get $K$ _distributions_, one for right after the start of the context, one for a token later, etc. Sample from those distributions sequentially. If the sampled token matches the corresponding random token, keep going, otherwise stop. 
+Append $K$ random tokens to the _target_ model's context. Evaluate the _target_ on the new context, to get $K$ _distributions_, one for right after the start of the context, one for a token later, etc. Sample from those distributions sequentially. If the sampled token matches the corresponding random token, _accept the random token_, and keep going, otherwise _reject it_ and stop. 
 
 This works but what are the odds your randomly selected token matches the token the model actually sampled? Probably pretty low, so this doesn't help too much.
 
@@ -1034,30 +1036,49 @@ Get a small "draft" model to "guess" what the next few tokens the _target_ will 
 The main problem is that the token you sample from the draft model and the token you sample from the base model have to agree exactly. What if the base model only puts max $5%$ probability on any token? Then your odds of matching any tokens (aside from the first one) are merely $5%$. 
 
 === Attempt 3 #urlcite("https://arxiv.org/abs/2302.01318", title: [Accelerating Large Language Model Decoding with Speculative Sampling])
-We need a less fragile way to sample that doesn't require exact matches between the draft and the target models. Suppose for a given token, the draft model outputs the distribution $q$ and the target model outputs the distribution $p$. The trick is going to be, instead of sampling from $p$, sample from $q$ most of the time and a "backup" distribution otherwise. We can arrange this to be equivalent to sampling from $p$. Since most of the time we just accept the sample from $q$, this gets rid of our problem!
+We need a less fragile way to sample that doesn't require exact matches between the draft and the target models. The insight is instead of working with samples from each model, we can work with their _distributions_. While individual samples might be unlikely to match, the target and draft model could still have very similar output distributions, and maybe we can exploit that. To see how, let's suppose for a given token, the draft model outputs the distribution $q$ and the target model outputs the distribution $p$.
 
-To see how to do this, observe for a given token $x$, there are two cases:
+Here's a simple case, Imagine $p = q$. Our old method would sample from both distributions and hope for an exact match. But clearly, a sample from $q$ is the same as a sample from $p$, so we should just use the sample from $q$!
+
+Now what if $p != q$, but for certain tokens they allocate the same amount of probability. That is, $p(x) = q(x),  forall x in T$. Well, we sample tokens from $T$ with equal probability in both $p$ and $q$, therefore we should always _accept_ the token from $q$, by the same logic as before. What if that doesn't happen? Well then we could _reject_ the sample, and fallback to sampling from $p$. But, we're now _more_ likely to sample tokens in $T$, because there are two chances to do so, one on the first draw, and twice if rejected the sample. The fix is sample tokens from $p$ but _just for the tokens not in $T$_. 
+
+#align(center, graphic(serving.speculative-split()))
+
+It's easy to see this works mathematically. Let $tilde(p)(x)$ be the probability we sample $x$ under the current procedure. Let $C$ be the mass of tokens in $T$, that is $C = sum_(x in T) q(x)$. Our rejection probability is $(1 - C)$, the odds we don't sample a token from $T$. The distribution we sample from upon rejection is $p(x)$ with tokens in $T$ zero'd out and rescaled so it has mass $1$: $p(x) slash (1 - C)$.
 $
-  cases(q(x) <= p(x), q(x) > p(x))
+  tilde(p)(x) = cases(
+    q(x) &"if" p(x) = q(x),
+    (1 - C)p(x) slash (1 - C) = p(x) &"if" p(x) != q(x)
+  )
 $
 
-Now, suppose every time the first condition was true, we just accepted the token. The problem would be the drafter allocates _too little_ probability to that token. That's where the second distribution comes in. When the second case happens, we can occasionally throw away the sample and sample from some new distribution which puts the right amount of mass on all entries of $p$ that meet the second criterion, and just enough mass on the entries of $p$ that meet the first criterion.  
+Let's see if we can take this idea a bit further. The key observation was that most of the time we could accept from $q$, and whenever we rejected, we could sample from some auxiliary distribution which when combined with $q$ formed $p$. We can observe a few things.
 
-To be exact, we'll say we accept with probability
+First if $q(x) > p(x)$, then we can't always accept, otherwise no matter how do we do the rejection step, we'll always put too much mass on $x$. If $q(x) <= p(x)$ we don't have this problem. Thus, what if we always accept if $q(x) <= p(x)$, and if it doesn't happen then we'll sample from...
 $
-  min(p(x)/q(x), 1)
+  cases(p(x) &"if" p(x) <= q(x), p(x) - q(x) &"if" p(x) > q(x))
 $
-Notice we always accept if $q(x) <= p(x)$. If the token is rejected, you sample from 
+You can check this works using the law of total probability. This is the approach we've found that's a big improvement over exact matching. However, we unconditionally reject if $q(x) > p(x)$, which is problematic because even similar $q$ and $p$ could end up rejecting frequently...
+
+=== Attempt 4
+ One simple observation is instead of unconditionally rejecting you can just accept with probability $p(x) slash q(x)$. Thus, the odds of accepting a token never exceeds $q(x) times p(x) slash q(x) = p(x)$. The new backup distribution becomes
 $
-  f(x) prop p(x) - min(p(x), q(x))
+  cases(p(x) - q(x) &"if" p(x) > q(x), 0 &"if" p(x) <= q(x)) \
+  = p(x) - min(p(x), q(x))
+$
+
+Let's see how this works mathematically. We accept with probability
+$
+  cases(p(x) slash q(x) &"if" p(x) <= q(x), 1 &"if" p(x) > q(x)) \
+  = min(p(x) slash q(x), 1)
 $
 
 We can analyze this with the law of total probability.
 $
-  P("Accept") = integral min(p(x)/q(x), 1) q(x) = C \
+  P("Accept") = sum_x min(p(x)/q(x), 1) q(x) = C \
   P("Accept")P(x | "Accept") = C(1/C min(p(x), q(x))) = min(p(x), q(x)) \
-  P("Reject")P(x | "Reject") = (1 - C)(p(x) - min(p(x), q(x)))/(1 - C) \
-  P(x) = p(x)
+  P("Reject")P(x | "Reject") = (1 - C)(p(x) - min(p(x), q(x)))/(1 - C) = p(x) - min(p(x), q(x))\
+  tilde(p)(x) = P("Accept")P(x | "Accept") + P("Reject")P(x | "Reject") = p(x)
 $
 
 And that's the whole trick. Drafter models are typically distilled versions of targets with tweaks
