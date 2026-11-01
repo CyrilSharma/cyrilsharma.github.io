@@ -27,6 +27,18 @@ The template collects these citations into a References section at the end.
 Articles without endnotes do not get an empty References section. Ordinary
 Typst footnotes remain available for explanatory notes.
 
+Mark an appendix block anywhere in an article with:
+
+```typst
+#appendix(title: [Attention Backward], anchor: <attention-backward>)[
+  The derivation goes here.
+]
+```
+
+The template moves these blocks to an Appendix section before References,
+letters them A, B, etc., and includes them in the outline. Link to a block
+with `@attention-backward` or `#link(<attention-backward>)[the appendix]`.
+
 ## Editor Setup
 
 ### VS Code

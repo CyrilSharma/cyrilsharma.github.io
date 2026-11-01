@@ -51,14 +51,15 @@
 
 #let prefill() = panel([Prefill · process the prompt together], stack(
   dir: ttb, spacing: 8pt,
-  grid(columns: (76pt, 1fr), align: horizon,
+  grid(columns: (76pt, 1fr), column-gutter: 3pt, align: horizon,
     [Prompt], tiles(([$x_1$], [$x_2$], [$x_3$], [$x_4$], [$x_5$]), fill: prompt, width: 42pt)),
   down,
   tile([Model · causal attention over the whole prompt], fill: compute, width: 400pt, height: 30pt),
   down,
-  grid(columns: (76pt, 1fr), row-gutter: 8pt, align: horizon,
-    [Stored K/V], tiles(([$x_1$], [$x_2$], [$x_3$], [$x_4$], [$x_5$]), width: 42pt),
-    [First output], tile([$y_1$], fill: token, width: 42pt)),
+  grid(columns: (76pt, 222pt, 42pt), column-gutter: 3pt, row-gutter: 4pt, align: horizon,
+    [], [Stored K/V], [New token],
+    [Result], tiles(([$x_1$], [$x_2$], [$x_3$], [$x_4$], [$x_5$]), width: 42pt),
+    tile([$y_1$], fill: token, width: 42pt)),
 ), caption: [Prompt positions run together; the saved K/V can then be reused during decode.])
 
 #let paged-kv() = panel([Paged KV cache · logical order, scattered physical pages], {

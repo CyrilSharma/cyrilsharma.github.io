@@ -10,6 +10,11 @@
   #if title == auto { link(url) } else { link(url, title) }
 ]<blog-urlcite>]
 
+// Mark a block anywhere in the source; main collects it before References.
+#let appendix(title: [Untitled], anchor: none, body) = [
+  #metadata((title: title, anchor: anchor, body: body))<blog-appendix>
+]
+
 // Separate adjacent URL-citation marks without changing article source text.
 // Inspect only ordinary content containers; leave deferred content and note
 // internals intact so Deixis retains its counters, styles, and backlinks.
@@ -61,6 +66,21 @@
     (body: result, changed: changed)
   }
   visit(body).body
+}
+
+#let render-appendices() = context {
+  let entries = query(metadata.where(label: <blog-appendix>))
+  if entries.len() > 0 {
+    body_page[
+      #heading(numbering: none)[Appendix]
+      #for (i, entry) in entries.enumerate() {
+        let data = entry.value
+        let title = heading(level: 2, numbering: none)[#numbering("A", i + 1). #data.title]
+        if data.anchor == none { title } else { [#title#data.anchor] }
+        separate-urlcites(data.body)
+      }
+    ]
+  }
 }
 
 #let author = "Cyril Sharma"
@@ -138,6 +158,7 @@
 
   html_rules[
     #separate-urlcites(body)
+    #render-appendices()
     #context if deixis-query-notes(include-types: "endnote").len() > 0 {
       // Deixis preserves each note's declaration styles. Restore the article
       // body style so notes from headings, bold, or italics match one another.
