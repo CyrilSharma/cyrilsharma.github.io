@@ -145,11 +145,12 @@ Approaches 2 and 3 are often preferred because they reduce the odds of sampling 
 == Attention
 Let $X$ be a $T times D$ matrix (i.e $\#"tokens" times "token-dim"$). Attention is defined as follows.
 $
-  Q = "RoPE"(X W_Q) quad K = "RoPE"(X W_K) quad V = X W_V \
-  S = (tilde(Q) tilde(K)^top + L)/sqrt(d) quad A = "softmax"(S)  quad Y = A V quad O = Y W_O
+  tilde(Q) = X W_Q quad tilde(K) = X W_K quad V = X W_V \
+  Q = "RoPE"(tilde(Q)) quad K = "RoPE"(tilde(K)) \
+  S = (Q K^top + L)/sqrt(d) quad A = "softmax"(S)  quad Y = A V quad O = Y W_O
 $
 
-$Q$, $K$, and $V$ are referred to as Queries, Keys and Values.
+$Q$, $K$, and $V$ are referred to as Queries, Keys and Values. Here $tilde(Q)$ and $tilde(K)$ are the linear projections, while $Q$ and $K$ include RoPE.
 $L$ is a $T times T$ matrix called the Attention mask and RoPE is a particular function. I'll discuss both later. Finally, the softmax is applied _rowwise_. 
 
 You can think of Attention as outputting a weighted average of _values_ based on how similar the corresponding _keys_ are to the _queries_. Fundamentally, Attention takes quadratic time because it computes and applies a $T times T$ matrix.
@@ -169,12 +170,12 @@ $
 
 It's pretty bad if your language model doesn't care about the _order_ in which it sees words! To see how RoPE helps, let's define it.
 $
-  "RoPE"(X_t)_(i, i+1) = R_(t, i) vec(X_(t, i), X_(t, i+1)) quad R_t = "Rot"(t theta_i)
+  "RoPE"(X_t)_(i, i+1) = R_(t, i) vec(X_(t, i), X_(t, i+1)) quad R_(t, i) = "Rot"(t theta_i)
 $
 
 Now consider $Q K^top = "RoPE"(tilde(Q)) "RoPE"(tilde(K))^top $. 
 $
-  (Q K^top)_(i j) = Q_i dot K_j = sum_k vec(tilde(Q)_(2k), tilde(Q)_(2k+1))^top "Rot"(theta_k (j - i)) vec(tilde(K)_(2k), tilde(K)_(2k+1))
+  (Q K^top)_(i j) = Q_i dot K_j = sum_k vec(tilde(Q)_(i, 2k), tilde(Q)_(i, 2k+1))^top "Rot"(theta_k (j - i)) vec(tilde(K)_(j, 2k), tilde(K)_(j, 2k+1))
 $
 
 Thus, RoPE adds a _relative-position sensitive_ adjustment to the dot-product breaking the invariance. It's worth noting there are other ways to break permutation-invariance.
@@ -248,105 +249,12 @@ $
 Incrementally merge chunks using FlashAttention and boom! You've successfully reduced the memory required per GPU. See Striped Attention #urlcite("https://arxiv.org/abs/2311.09431", title: [Striped Attention: Faster Ring Attention for Causal Transformers]) for a simple way to save compute on the Causal mask.
 
 === Attention Backward
-I'll slightly rephrase the definition to make the proof slicker.
+Here $O = A V$ is the attention output before the final output projection $W_O$. The softmax gradient can be written as
 $
-  Q = X W_Q quad K = X W_K quad V = X W_V \
-  tilde(Q) = "RoPE"(Q) quad tilde(K) = "RoPE"(K) \
-  S = (tilde(Q) tilde(K)^top + L)/sqrt(d) quad A = "softmax"(S)  quad O = A V
+  nabla L(A) = nabla L(O) V^top quad
+  nabla L(S) = (nabla L(A) - (nabla L(O) dot.o O) 1 1^top) dot.o A
 $
-Now assume we know $nabla L(O)$. We immediately have
-$
-  nabla L(A) = nabla L(O) V^top quad  nabla L(V) = A^top nabla L(O) \
-  nabla L(W_v) = X^top nabla L(V) quad nabla L(W_k) = X^top nabla L(K) quad nabla L(W_q) = X^top nabla L(Q) \
-  nabla L(X) = nabla L(V) W_V^top + nabla L(Q) W_Q^top + nabla L(K) W_K^top 
-$
-
-We now need to differentiate through rowwise softmax.
-$
-  Z = exp[S] 1 quad "softmax"(S) = exp[S - log[Z]1^top] \
-  A = "softmax"(S) quad dA = d"softmax"(S)
-$
-$
-  ip(nabla L(S), d S) &= ip(nabla L(A), d A) \
-  &= ip(nabla L(A), d"softmax"(S)) \
-  &= ip(nabla L(A), A dot.o (d S - d log[Z]1^top)) \
-  &= ip(nabla L(A) dot.o A, d S) - ip(nabla L(A) dot.o A, d log[Z]1^top))
-$
-
-Compute the inner differential term.
-$
-  d Z = d(exp[S]) 1 = (exp[S] dot.o d S) 1 \
-  d(log[Z]1^top) = ("inv"[Z] dot.o d Z) 1^top = "inv"[Z]1^top dot.o (exp[S] dot.o d S) 1 1^top = (A dot.o d S) 1 1^top
-$
-
-Substitute it back in...
-$
-  => ip(nabla L(A) dot.o A, (A dot.o d S) 1 1^top) = ip((nabla L(A) dot.o A) 1 1^top dot.o A, d S)
-$
-$
-  ip(nabla L(S), d S) = ip(nabla L(A) dot.o A - (nabla L(A) dot.o A) 1 1^top dot.o A, d S) \
-  nabla L(S) = nabla L(A) dot.o A - (nabla L(A) dot.o A) 1 1^top dot.o A
-$
-
-// $
-//   "softmax"(x)_i = exp(x_i) / (sum exp(x_i)) quad log("softmax"(x))_i = x_i - log(sum exp(x_i)) \
-//   d/dx_j log("softmax"(x)_i) = (d/dx_j "softmax"(x)_i)/"softmax"(x)_i =  I[i = j] - (exp(x_j))/(sum exp(x_i)) \
-//   (d/dx_j "softmax"(x)_i) = (I[i = j] - "softmax"(x)_j)"softmax"(x)_i \
-//   (d "softmax"(x))/(d x) = ("diag"("softmax"(x)) - "softmax"(x)^top "softmax"(x))
-// $
-
-// Thus we have,
-// $
-//   (d L) / (d S) = vec(
-//     (d L) slash (d A_1)  ("diag"(A_1) - A_1^top A_1),
-//     ...,
-//     (d L) slash (d A_n)  ("diag"(A_n) - A_n^top A_n)
-//   ) = \
-//   vec(
-//     (g_1 dot.o A_1) - (g_1 dot A_1) A_1,
-//     ...,
-//     (g_n dot.o A_n) - (g_n dot A_n) A_n,
-//   )  = (g dot.o A) - vec((g_1 dot A_1) A_1, ..., (g_n dot A_n) A_n)
-// $
-There's one little trick we can use to make this more efficient. Remember that 
-$
-  nabla L(A) = nabla L(O) V^top
-$
-
-Hence, 
-$
-  (nabla L(A) dot.o A) 1 1^top dot.o A = (nabla L(O)V^top dot.o A) 1 1^top dot.o A = \
-  "RowSum"(nabla L(O)_i V^top dot.o A_i) 1^top dot.o A = \
-  "RowSum"(nabla L(O)_i V^top A_i^top) 1^top dot.o A = \
-  "RowSum"(nabla L(O)_i O_i^top) 1^top dot.o A = \
-  (nabla L(O) dot.o O) 1 1^top dot.o A
-$
-// Then, $
-//   g_i dot A_i = ((d L)/(d O)V^top)_i dot A_i = (((d L)/(d O))_i V^top) dot A_i = ((d L)/(d O))_i V^top A_i^top =\
-//    ((d L)/(d O))_i O_i^top = ((d L)/(d O))_i dot O_i
-// $
-
-So the final gradient can be written as
-$
-  (nabla L(A) - (nabla L(O) dot.o O)1 1^top) dot.o A
-$
-// $
-//   D_i = ((d L)/(d O))_i dot O_i \
-//   (g dot.o A) - ("diag"(D)) A = A dot.o (g - D bold(1)^T)
-// $
-
-Why this form instead of the previous one? Well before we had those $1 1^top$ terms applied to $A$ and now they're applied to $O$ instead. Those terms correspond to row summation and broadcasts, so you need to read the whole row to compute them. $A$ is a huge matrix that we prefer to materialize on the fly, so not needing to reduce along its rows is a big win!
-
-The rest is much simpler,
-$
-  nabla L(K) = (nabla L(S)^top tilde(Q))/sqrt(d) quad nabla L(tilde(Q)) = (nabla L(S) tilde(K))/sqrt(d)
-$
-
-And finally, we differentiate through RoPE.
-$
-     R_(t, i) = "Rot"(t theta_i) quad "RoPE"(X_t)_(i, i+1) = R_(t, i) vec(X_(t, i), X_(t, i+1)) \
-$
-RoPE is a blocked matrix with 2x2 rotation sub-matrices on the diagonal. The gradient is obtained by applying the transpose of the block matrix, i.e "unrotating" each pair of coordinates. We're done!
+See #link(<attention-backward-derivation>)[the appendix] for how we got this formula.
 
 Now, FlashAttention makes the following observation: you don't actually have to store $nabla L(A)$ and $nabla L(S)$ to memory! $nabla L(A)$ can be computed on the fly from the derivative we got earlier, $nabla L(S)$ too, and then you can directly use $nabla L(S)$ to compute the gradients with respect to the keys and values. This reduces the memory bandwidth required for an attention backwards to linear in the size of the inputs, just like the forward! The full algorithm is as follows. $log(Z)$ is saved from the forward.
 $
@@ -354,15 +262,15 @@ $
   A_(i j) = exp(S_(i j) - log(Z)_i) \
   nabla L(A)_(i j) = nabla L(O)_i V_j^top \
   nabla L(S)_(i j) = A_(i j) dot.o (nabla L(A)_(i j) - nabla L(O)_i dot O_i) \
-  nabla L(tilde(Q))_(i) <- nabla L(tilde(Q))_(i) + nabla L(S)_(i j) K_j slash sqrt(d) \
-  nabla L(tilde(K))_(j) <- nabla L(tilde(K))_(j) + nabla L(S)^top_(i j) Q_i slash sqrt(d) \
-  nabla L(V)_j <- nabla L(V)_j + A_(i j)^top G_i
+  nabla L(Q)_(i) <- nabla L(Q)_(i) + nabla L(S)_(i j) K_j slash sqrt(d) \
+  nabla L(K)_(j) <- nabla L(K)_(j) + nabla L(S)^top_(i j) Q_i slash sqrt(d) \
+  nabla L(V)_j <- nabla L(V)_j + A_(i j)^top nabla L(O)_i
 $
 
-Where the $nabla L(S)^top_(i j)$ term is the $(i, j)$th sub-block, transposed, not an index into a transpose. Interestingly, $nabla L(tilde(Q))$ requires reducing $S$ along a different dimension than $nabla L(tilde(K)), nabla L(tilde(V))$, which either requires two passes or using atomics to reduce along one of the dimensions. This is not a problem you see with the forward.
+Where the $nabla L(S)^top_(i j)$ term is the $(i, j)$th sub-block, transposed, not an index into a transpose. Interestingly, $nabla L(Q)$ requires reducing $S$ along a different dimension than $nabla L(K), nabla L(V)$, which either requires two passes or using atomics to reduce along one of the dimensions. This is not a problem you see with the forward.
 
 === Backwards Ring Attention
-This is very similar to before. Look at the above algorithm. Anything with the $i$ index is not rotated, everything with just the $j$ index is. We perform $T$ iterations, and it's easy to see that every combo $(i, j)$ is encountered, so every term gets computed. Notice that we have two new terms to rotate, the $nabla L(tilde(K)_j)$ and $nabla L(tilde(V)_j)$ terms. 
+This is very similar to before. Look at the above algorithm. Anything with the $i$ index is not rotated, everything with just the $j$ index is. We perform $T$ iterations, and it's easy to see that every combo $(i, j)$ is encountered, so every term gets computed. Notice that we have two new terms to rotate, the $nabla L(K)_j$ and $nabla L(V)_j$ terms.
 
 === KV Caching
 Suppose I want to compute Attention over $X'$ where $X' = "cat"(X, X_t)$. This is commonly needed during autoregressive generation where you extend the input sequence by the last token the model outputted. Turns out a lot of the previous computation can be re-used to make this faster than $O(T^2)$. Under causal masking (e.g. the query at $i$ cannot interact with keys for $j > i$) and ignoring normalization...
@@ -674,9 +582,9 @@ $
   X[B, S, D] times_D W_"up" [D, F] times_F W_"down" [F, D] = O[B, S, D]
 $
 
-Finally, $O$ will be used to make $Q, K, V$. They're all pretty similar, let's just look at $Q$.
+Finally, $O$ will be used to make the linear projections $tilde(Q), tilde(K), V$. They're all pretty similar, let's just look at $tilde(Q)$; applying RoPE afterward preserves its sharding.
 $
-  O[B, S, D] times_D W_Q [D, G, H, D H] = Q[B, G, H, S, D H]
+  O[B, S, D] times_D W_Q [D, G, H, D H] = tilde(Q)[B, G, H, S, D H]
 $
 
 Now we can consider how to split up work across GPUs. Some questions to keep in mind as we go.
@@ -921,6 +829,97 @@ $
 As usual, you should treat the all-gather followed by the matmul as one fused operation.
 
 This becomes advantageous relative to EP when moving the weights has less memory traffic than moving the activations. It also doesn't require synchronization unlike the Expert Parallelism, e.g. each GPU computes its shard independently from the rest. If you pipe this into a scheme like DPA, you actually never need to synchronize between the replicas at all!
+
+== Synthesis
+
+#let scaling-table(..args) = {
+  let body = table(..args)
+  context if std.target() == "html" {
+    html.elem("div", attrs: ("style": "overflow-x: auto;"), body)
+  } else { body }
+}
+
+The costs per GPU, for a balanced forward pass. Traffic is measured in tensor elements not bytes.
+
+*Storage vs. HBM Traffic:* storage is how memory you need per GPU, HBM traffic counts reads and writes during the pass. HBM Traffic can be larger than storage, for example FSDP can store $O(D F slash P)$ weights per GPU while loading $O(D F)$ gathered weights per pass. #urlcite("https://jax-ml.github.io/scaling-book/roofline/", title: [All About Rooflines])
+
+Traffic assumes perfect operand reuse, additional tile rereads depend on the kernel.
+
+$ N = B S quad P "GPUs" quad x = |X| quad y = |Y| quad x y = P $
+
+=== Attention
+
+Ignoring projections. $C_a = B G H S L d_h$, $M_q = B G H S d_h$, $M_(k v) = 2 B G L d_h$; $d_h$ is the per-head dimension ($D H$ above). Decode CP corresponds to Mesh with $x = 1$, $y = P$.
+
+#{
+  set text(size: 9pt)
+  set par(justify: false)
+  scaling-table(
+    columns: (1.05fr, 0.95fr, 1.3fr, 1.7fr),
+    inset: 5pt,
+    stroke: 0.4pt + rgb("ccd4de"),
+    fill: (_, row) => if row == 0 { rgb("e8edf4") },
+    table.header([*Scheme*], [*Compute*], [*Communication*], [*HBM traffic*]),
+    [Data-parallel attention], [$C_a slash P$], [$0$],
+    [$O((M_q + M_(k v)) slash P)$],
+    [Head parallelism], [$C_a slash P$], [$0$],
+    [$O((M_q + M_(k v)) slash P)$],
+    [Context / Ring (query-sharded)], [$C_a slash P$], [$O(M_(k v))$],
+    [$O(M_q slash P + M_(k v))$],
+    [Mesh Attention], [$C_a slash P$], [$O(M_q slash x)$],
+    [$O(M_q slash x + M_(k v) slash y)$],
+    [DeepSpeed-Ulysses (full redistribution)], [$C_a slash P$], [$O((M_q + M_(k v)) slash P)$],
+    [$O((M_q + M_(k v)) slash P)$],
+    [Ring Pass-Q], [$C_a slash P$], [$O(M_q)$],
+    [$O(M_q + M_(k v) slash P)$],
+  )
+}
+
+=== Dense FFN
+
+#{
+  set text(size: 9pt)
+  set par(justify: false)
+  scaling-table(
+    columns: (1.05fr, 0.95fr, 1.3fr, 1.7fr),
+    inset: 5pt,
+    stroke: 0.4pt + rgb("ccd4de"),
+    fill: (_, row) => if row == 0 { rgb("e8edf4") },
+    table.header([*Scheme*], [*Compute*], [*Communication*], [*HBM traffic*]),
+    [Data parallelism], [$O(N D F slash P)$], [$0$],
+    [$O(D F + N (D + F) slash P)$],
+    [FSDP], [$O(N D F slash P)$], [$O(D F)$],
+    [$O(D F + N (D + F) slash P)$],
+    [Tensor parallelism], [$O(N D F slash P)$], [$O(N D)$],
+    [$O(D F slash P + N D + N F slash P)$],
+    [2D weight stationary], [$O(N D F slash P)$], [$O(N D slash x + N F slash y)$],
+    [$O(D F slash P + N D slash x + N F slash y)$],
+    [TP + FSDP], [$O(N D F slash P)$], [$O(D F slash y + N D slash x)$],
+    [$O(D F slash y + N D slash x + N F slash P)$],
+    [FFN mystery scheme], [$O(N D F slash P)$], [$O(3 N D slash x + (D + N)F slash y)$],
+    [$O(D F slash y + N D slash x + N F slash y)$],
+  )
+}
+
+=== MOE
+
+$E$ experts, $E_a$ touched globally, $k$ selected per token.
+
+#{
+  set text(size: 9pt)
+  set par(justify: false)
+  scaling-table(
+    columns: (1.05fr, 0.95fr, 1.3fr, 1.7fr),
+    inset: 5pt,
+    stroke: 0.4pt + rgb("ccd4de"),
+    fill: (_, row) => if row == 0 { rgb("e8edf4") },
+    table.header([*Scheme*], [*Compute*], [*Communication*], [*HBM traffic*]),
+    [Expert parallelism], [$O(N k D F slash P)$], [$O(N k D slash P)$],
+    [$O((E_a D F + N k (D + F)) slash P)$],
+    [Distributed weight DP], [$O(N k D F slash P)$], [$O(E D F)$ (full gathers)],
+    [$O(E D F + N k (D + F) slash P)$],
+  )
+}
 
 = Serving
 We know what a model is, and we know a million ways to slap it onto a bunch of GPUs. How do we start serving LLMs at production scale?
@@ -1353,3 +1352,106 @@ So, what can this model teach us? We can read off a few things
 - Stability under a fixed learning rate requires $0 < eta < 2 slash (max_i (h_i slash p_i))$. Thus, stability is governed by the maximum eigenvalue of the preconditioned Hessian, known as the sharpness.
 - The one-step critical batch size depends on the noise and current risks as well as the pre-conditioner. As the preconditioner is one of the main things that varies optimizer to optimizer, we can conclude the critical batch size is optimizer-dependent.
 - The asymptotic risk shrinks with the batch size, and grows with the step size, noise, and curvature.
+
+
+#appendix(title: [Attention Backward], anchor: <attention-backward-derivation>)[
+As in the main text, we omit the final output projection and write $O = A V$.
+$
+  tilde(Q) = X W_Q quad tilde(K) = X W_K quad V = X W_V \
+  Q = "RoPE"(tilde(Q)) quad K = "RoPE"(tilde(K)) \
+  S = (Q K^top + L)/sqrt(d) quad A = "softmax"(S)  quad O = A V
+$
+Now assume we know $nabla L(O)$. We immediately have
+$
+  nabla L(A) = nabla L(O) V^top quad  nabla L(V) = A^top nabla L(O) \
+  nabla L(W_V) = X^top nabla L(V) quad nabla L(W_K) = X^top nabla L(tilde(K)) quad nabla L(W_Q) = X^top nabla L(tilde(Q)) \
+  nabla L(X) = nabla L(V) W_V^top + nabla L(tilde(Q)) W_Q^top + nabla L(tilde(K)) W_K^top
+$
+
+We now need to differentiate through rowwise softmax.
+$
+  Z = exp[S] 1 quad "softmax"(S) = exp[S - log[Z]1^top] \
+  A = "softmax"(S) quad dA = d"softmax"(S)
+$
+$
+  ip(nabla L(S), d S) &= ip(nabla L(A), d A) \
+  &= ip(nabla L(A), d"softmax"(S)) \
+  &= ip(nabla L(A), A dot.o (d S - d log[Z]1^top)) \
+  &= ip(nabla L(A) dot.o A, d S) - ip(nabla L(A) dot.o A, d log[Z]1^top))
+$
+
+Compute the inner differential term.
+$
+  d Z = d(exp[S]) 1 = (exp[S] dot.o d S) 1 \
+  d(log[Z]1^top) = ("inv"[Z] dot.o d Z) 1^top = "inv"[Z]1^top dot.o (exp[S] dot.o d S) 1 1^top = (A dot.o d S) 1 1^top
+$
+
+Substitute it back in...
+$
+  => ip(nabla L(A) dot.o A, (A dot.o d S) 1 1^top) = ip((nabla L(A) dot.o A) 1 1^top dot.o A, d S)
+$
+$
+  ip(nabla L(S), d S) = ip(nabla L(A) dot.o A - (nabla L(A) dot.o A) 1 1^top dot.o A, d S) \
+  nabla L(S) = nabla L(A) dot.o A - (nabla L(A) dot.o A) 1 1^top dot.o A
+$
+
+// $
+//   "softmax"(x)_i = exp(x_i) / (sum exp(x_i)) quad log("softmax"(x))_i = x_i - log(sum exp(x_i)) \
+//   d/dx_j log("softmax"(x)_i) = (d/dx_j "softmax"(x)_i)/"softmax"(x)_i =  I[i = j] - (exp(x_j))/(sum exp(x_i)) \
+//   (d/dx_j "softmax"(x)_i) = (I[i = j] - "softmax"(x)_j)"softmax"(x)_i \
+//   (d "softmax"(x))/(d x) = ("diag"("softmax"(x)) - "softmax"(x)^top "softmax"(x))
+// $
+
+// Thus we have,
+// $
+//   (d L) / (d S) = vec(
+//     (d L) slash (d A_1)  ("diag"(A_1) - A_1^top A_1),
+//     ...,
+//     (d L) slash (d A_n)  ("diag"(A_n) - A_n^top A_n)
+//   ) = \
+//   vec(
+//     (g_1 dot.o A_1) - (g_1 dot A_1) A_1,
+//     ...,
+//     (g_n dot.o A_n) - (g_n dot A_n) A_n,
+//   )  = (g dot.o A) - vec((g_1 dot A_1) A_1, ..., (g_n dot A_n) A_n)
+// $
+There's one little trick we can use to make this more efficient. Remember that
+$
+  nabla L(A) = nabla L(O) V^top
+$
+
+Hence,
+$
+  (nabla L(A) dot.o A) 1 1^top dot.o A = (nabla L(O)V^top dot.o A) 1 1^top dot.o A = \
+  "RowSum"(nabla L(O)_i V^top dot.o A_i) 1^top dot.o A = \
+  "RowSum"(nabla L(O)_i V^top A_i^top) 1^top dot.o A = \
+  "RowSum"(nabla L(O)_i O_i^top) 1^top dot.o A = \
+  (nabla L(O) dot.o O) 1 1^top dot.o A
+$
+// Then, $
+//   g_i dot A_i = ((d L)/(d O)V^top)_i dot A_i = (((d L)/(d O))_i V^top) dot A_i = ((d L)/(d O))_i V^top A_i^top =\
+//    ((d L)/(d O))_i O_i^top = ((d L)/(d O))_i dot O_i
+// $
+
+So the final gradient can be written as
+$
+  (nabla L(A) - (nabla L(O) dot.o O)1 1^top) dot.o A
+$
+// $
+//   D_i = ((d L)/(d O))_i dot O_i \
+//   (g dot.o A) - ("diag"(D)) A = A dot.o (g - D bold(1)^T)
+// $
+
+Why this form instead of the previous one? Well before we had those $1 1^top$ terms applied to $A$ and now they're applied to $O$ instead. Those terms correspond to row summation and broadcasts, so you need to read the whole row to compute them. $A$ is a huge matrix that we prefer to materialize on the fly, so not needing to reduce along its rows is a big win!
+
+The rest is much simpler,
+$
+  nabla L(K) = (nabla L(S)^top Q)/sqrt(d) quad nabla L(Q) = (nabla L(S) K)/sqrt(d)
+$
+
+And finally, we differentiate through RoPE.
+$
+     R_(t, i) = "Rot"(t theta_i) quad "RoPE"(X_t)_(i, i+1) = R_(t, i) vec(X_(t, i), X_(t, i+1)) \
+$
+RoPE is a blocked matrix with 2x2 rotation sub-matrices on the diagonal. The gradient is obtained by applying the transpose of the block matrix, i.e "unrotating" each pair of coordinates. This maps $nabla L(Q)$ and $nabla L(K)$ back to $nabla L(tilde(Q))$ and $nabla L(tilde(K))$, which are used in the weight and input gradients above. We're done!
+]
