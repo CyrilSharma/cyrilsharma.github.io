@@ -1028,7 +1028,9 @@ This is a little complicated to explain, so we're going to work up to it with a 
 
 Append $K$ random tokens to the _target_ model's context. Evaluate the _target_ on the new context, to get $K$ _distributions_, one for right after the start of the context, one for a token later, etc. Sample from those distributions sequentially. If the sampled token matches the corresponding random token, _accept the random token_, and keep going, otherwise _reject it_ and stop. 
 
-This works but what are the odds your randomly selected token matches the token the model actually sampled? Probably pretty low, so this doesn't help too much.
+This works because of causal masking. The $i$th distribution the model outputs is a function of the first $i$ tokens, and _not_ any of the other tokens you've appended to the context. Thus, each output behaves as if you had done the normal loop of append a token, evaluate the model to get the next token, append a token, etc. 
+
+Unfortunately, the odds your randomly selected token matches the token the model actually sampled are pretty low, so this doesn't help too much.
 
 === Attempt 2
 Get a small "draft" model to "guess" what the next few tokens the _target_ will output are. Then do the same approach as before. If you trained the model to roughly output the same distribution the LLM would, then you should get much higher acceptance rates.
@@ -1054,7 +1056,7 @@ $
 
 Let's see if we can take this idea a bit further. The key observation was that most of the time we could accept from $q$, and whenever we rejected, we could sample from some auxiliary distribution which when combined with $q$ formed $p$. We can observe a few things.
 
-First if $q(x) > p(x)$, then we can't always accept, otherwise no matter how do we do the rejection step, we'll always put too much mass on $x$. If $q(x) <= p(x)$ we don't have this problem. Thus, what if we always accept if $q(x) <= p(x)$, and if it doesn't happen then we'll sample from...
+First if $q(x) > p(x)$, then we can't always accept, otherwise no matter how do we do the rejection step, we'll always put too much mass on $x$. If $q(x) <= p(x)$ we don't have this problem. Thus, what if we always accept if $q(x) <= p(x)$, and if it doesn't happen then we'll sample from (a rescaled version of)
 $
   cases(p(x) &"if" p(x) <= q(x), p(x) - q(x) &"if" p(x) > q(x))
 $
@@ -1063,7 +1065,7 @@ You can check this works using the law of total probability. This is the approac
 === Attempt 4
  One simple observation is instead of unconditionally rejecting you can just accept with probability $p(x) slash q(x)$. Thus, the odds of accepting a token never exceeds $q(x) times p(x) slash q(x) = p(x)$. The new backup distribution becomes
 $
-  cases(p(x) - q(x) &"if" p(x) > q(x), 0 &"if" p(x) <= q(x)) \
+  prop cases(p(x) - q(x) &"if" p(x) > q(x), 0 &"if" p(x) <= q(x)) \
   = p(x) - min(p(x), q(x))
 $
 
