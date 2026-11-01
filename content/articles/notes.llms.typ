@@ -8,6 +8,7 @@
 #show: note_page
 
 #import "@preview/fletcher:0.5.8" as fletcher: diagram, node, edge
+#import "/typ/templates/llms-serving.typ" as serving
 #let rise = 0.55
 #let tap(anchor, name) = node(
   (rel: (-0.5, 0), to: anchor), "",
@@ -23,7 +24,7 @@
 )
 
 = Overview
-The architecture of a prototypical LLM is actually remarkably simple.
+The architecture of a prototypical LLM is actually remarkably simple. #urlcite("https://arxiv.org/abs/1706.03762", title: [Attention Is All You Need])
 
 
 *Transformer Block*
@@ -92,18 +93,18 @@ The architecture of a prototypical LLM is actually remarkably simple.
 )))
 
 == Tokenization
-The first thing that happens when you query an LLM is the text gets split into small groups of bytes called tokens. These "pieces" are typically a bit longer then characters but a bit shorter than words.
+The first thing that happens when you query an LLM is the text gets split into small groups of bytes called tokens. These "pieces" are typically a bit longer than characters but a bit shorter than words.
 
 + Why use tokens instead of characters?
   - As we will later see, Attention takes $O(T^2)$ time to process a sequence of length $T$. Thus, reducing the length of the sequence it processes is a useful optimization.
-  - There's also this intuition that the _unit_ of attention should be semantically meaningful. If you treat attention as a key-value lookup system, it makes sense that being able to search via a semantically meaningful "word-esque" thing is more powerful then being able to search by character.
+  - There's also this intuition that the _unit_ of attention should be semantically meaningful. If you treat attention as a key-value lookup system, it makes sense that being able to search via a semantically meaningful "word-esque" thing is more powerful than being able to search by character.
 + Why use tokens instead of words?
   - We can tightly control the number of unique tokens, whereas the number of words is large and out of our control. This is important, because an essential piece of training LLMs is being able to fully model a distribution over their outputs.
   - Any piece of language (even things like ascii art!) can be split into tokens, whereas only clean, typo-free, language can be split into words.
 
-To decide what your tokens are, you'll typically run an iterative merging algorithm (called Byte Pair Encoding) where you insert every letter as a token. Then, you iteratively merge all instances of the most common token pair into a new token, and you keep going until you reach "enough" tokens. This is very similar to dictionary-based compression methods like Zip. 
+To decide what your tokens are, you'll typically run an iterative merging algorithm (called Byte Pair Encoding) #urlcite("https://aclanthology.org/P16-1162/", title: [Neural Machine Translation of Rare Words with Subword Units]) where you insert every letter as a token. Then, you iteratively merge all instances of the most common token pair into a new token, and you keep going until you reach "enough" tokens. This is very similar to dictionary-based compression methods like Zip.
 
-Once you've decided what tokens you'll use, you just need to apply the merge rules you obtained in Byte Pair Encoding in the same order for whatever piece of text you want to process. You can do this with a priority-queue. There might be other optimization available. For example, many tokenizers split on whitespace tokens, the initial split-on-whitespace phase is called pretokenization. The "pre-tokens" are often small enough to cache their tokenizations and this is the approach used in fast tokenizers like #link("https://github.com/marcelroed/gigatoken")[GigaToken].
+Once you've decided what tokens you'll use, you just need to apply the merge rules you obtained in Byte Pair Encoding in the same order for whatever piece of text you want to process. You can do this with a priority-queue. There might be other optimizations available. For example, many tokenizers split on whitespace tokens, the initial split-on-whitespace phase is called pretokenization. The "pre-tokens" are often small enough to cache their tokenizations and this is the approach used in fast tokenizers like GigaToken. #urlcite("https://github.com/marcelroed/gigatoken", title: [GigaToken: Language model tokenization at GB/s])
 
 == Embedding and Unembedding
 For each unique _token_ we'll associate a random, learnable vector, called the token's _embedding_. This is typically implemented as a lookup table, e.g.
@@ -117,15 +118,29 @@ $
   "Embed"(X) = X W_E
 $
 
-At the end we of the transformer we do almost the reverse
+At the end of the transformer we do almost the reverse
 $
   H in R^D quad "Unembed"(H) in R^(|"Token Vocabulary"|) \ 
-  "Uembed"(H) = H W_U
+  "Unembed"(H) = H W_U
 $
 
-Some early Transformer models even took $W_U = W_E^top$ which gives an interesting inductive bias: if you want to output a given token, the best way to do that is to make the hidden state very close to the original embedding.
+Some early Transformer models even took $W_U = W_E^top$ #urlcite("https://arxiv.org/abs/1608.05859", title: [Using the Output Embedding to Improve Language Models]) which gives an interesting inductive bias: if you want to output a given token, the best way to do that is to make the hidden state very close to the original embedding.
 
+== Softmax #urlcite("https://d2l.ai/chapter_linear-classification/softmax-regression.html", title: [Dive into Deep Learning: Softmax Regression])
+This is an operation that converts a series of numbers (referred to as logits) into a valid probability distribution (e.g. a set of positive numbers in $[0, 1]$ which sum to $1$). It's defined as follows.
+$ 
+  "Softmax"(x_1, ..., x_n)_i = exp(x_i)/(sum_j exp(x_j))
+$
 
+It shows up both inside every attention layer and right after the unembedding layer to turn the logits into a distribution that can be sampled from.
+
+== Sampling
+Now that we have a distribution over tokens, we need to pick a specific token. Strategies:
++ Just normal categorical sampling, via the Inverse Transform. #urlcite("https://luc.devroye.org/rnbookindex.html", title: [Non-Uniform Random Variate Generation: The Inversion Method])
++ Top-K, which does categorical sampling only over the K largest logits. #urlcite("https://arxiv.org/abs/1805.04833", title: [Hierarchical Neural Story Generation])
++ Top-P, which does categorical sampling only over the smallest set of tokens whose cumulative probability exceeds $p$. #urlcite("https://arxiv.org/abs/1904.09751", title: [The Curious Case of Neural Text Degeneration])
+
+Approaches 2 and 3 are often preferred because they reduce the odds of sampling unusually "bad" (low-probability) tokens.
 
 == Attention
 Let $X$ be a $T times D$ matrix (i.e $\#"tokens" times "token-dim"$). Attention is defined as follows.
@@ -142,17 +157,17 @@ You can think of Attention as outputting a weighted average of _values_ based on
 === Attention Mask
 The purpose of $L$ is to constrain which _inputs_ have effects on which _outputs_ of the attention operator. By setting $L_(i j) = -oo$, we zero out $A_(i j)$ which removes the influence of the $j$th input on the $i$th output. 
 
-To see why this is important, consider a typical training objective: predict the next token. Concretely, given a sequence of tokens $S_1, ..., S_t$, you want the model to output $S_2, ..., S_(t + 1)$. Now, the idea of this objective is if you can predict the next token, _without actually being shown the next token_ then you have a pretty good understanding of language. Obviously, the objective is undermined if the model is able to make the $i$th output depend on the $i$th input, so you'll want to choose $L$ accordingly.
+To see why this is important, consider a typical training objective: predict the next token. Concretely, given a sequence of tokens $S_1, ..., S_t$, you want the model to output $S_2, ..., S_(t + 1)$. Now, the idea of this objective is if you can predict the next token, _without actually being shown the next token_ then you have a pretty good understanding of language. Obviously, the objective is undermined if the model is able to make the $i$th output depend on the $(i + 1)$th input, so you'll want to choose $L$ accordingly.
 
 Typically, we'll choose the mask to ensure the $i$th output is only a function of the first $<= i$ inputs. This enables autoregressive decoding, discussed later.
 
-=== RoPE
+=== RoPE #urlcite("https://arxiv.org/abs/2104.09864", title: [RoFormer: Enhanced Transformer with Rotary Position Embedding])
 RoPE is an operator designed to break the permutation equivariance of attention. To be more concrete, the problem is without RoPE the following is true (ignoring the causal mask).
 $
   "Attention"("Permutation"(X)) = "Permutation"("Attention"(X))
 $
 
-It's pretty bad if your language model doesn't care about the _order_ it sees words! To see how RoPE helps, let's define it.
+It's pretty bad if your language model doesn't care about the _order_ in which it sees words! To see how RoPE helps, let's define it.
 $
   "RoPE"(X_t)_(i, i+1) = R_(t, i) vec(X_(t, i), X_(t, i+1)) quad R_t = "Rot"(t theta_i)
 $
@@ -163,29 +178,23 @@ $
 $
 
 Thus, RoPE adds a _relative-position sensitive_ adjustment to the dot-product breaking the invariance. It's worth noting there are other ways to break permutation-invariance.
-- You can associate each sequence-position with a vector and adding that to the keys and queries, but that makes the relative-position and dot product connection more obtuse and potentially harder to learn.
-- You can rely on the causal mask to break permutation equivariance, which _can_ work but provides no helpful learning bias to the model (RoPE implicitly upweights attention on nearby words).
+- You can associate each sequence-position with a vector and add that to the keys and queries, but that makes the relative-position and dot product connection more obtuse and potentially harder to learn.
+- You can rely on the causal mask to break permutation equivariance, which _can_ work #urlcite("https://arxiv.org/abs/2305.19466", title: [The Impact of Positional Encoding on Length Generalization in Transformers]) but provides no helpful learning bias to the model (RoPE implicitly upweights attention on nearby words).
 
 === Attention Heads
 People have played around a lot with the Attention operator, and there are many variants. The version described above is known as Single Head Attention. I won't describe every variant, but it is very important to know the concept of an _attention head_. An _attention head_ essentially takes a slice of Q, K, V across their $D$ dimension, and then processes this with Single Head Attention. To combine the results of multiple heads, you combine the head outputs along the $D$ dimension, the reverse of the original split. Empirically, having heads gives a slight expressivity gain with the rough intuition being you can use different attention mixers for different input dimensions, for the same amount of compute.
 
 
-=== FlashAttention
+=== FlashAttention #urlcite("https://arxiv.org/abs/2205.14135", title: [FlashAttention: Fast and Memory-Efficient Exact Attention with IO-Awareness])
 A naive implementation of Attention computes the $Q K ^T$ matrix upfront and then retrieves it from DRAM when applying it to $V$. This is bad because the memory bandwidth needed scales with the square of the sequence length and on GPUs the memory bandwidth is much lower than the compute bandwidth. Thus, the GPU will spend all its time loading and writing to DRAM instead of doing matrix multiplication.
 
-The idea of FlashAttention is to bring the memory needed at any one time down to
+The idea of FlashAttention is to avoid reading or writing the attention matrix from DRAM. Bring the amount of memory reads and writes from DRAM down to
 $ O("mem"(Q) + "mem"(K) + "mem"(V)) $
 
-While making good use of the modern GPU's blockwise matrix multiplication primitives.
-To understand how, first observe that softmax is
-$
-  "softmax"(hat(x)) = exp(hat(x))/(sum_i exp(hat(x_i)))
-$
-
-Therefore, ignoring the masking and scaling terms...
+To understand how, let's expand the definition of Attention a bit...
 $
    O = "softmax"(Q K^top) V \
-   O_i = sum_j "softmax"(Q K^top)_(i j) quad V_j = sum_j exp(Q_i dot K_j) / (sum_j exp (Q_i dot K_j)) V_j
+   O_i = sum_j "softmax"(Q K^top)_(i j) V_j = sum_j exp(Q_i dot K_j) / (sum_j exp (Q_i dot K_j)) V_j
 $
 
 Now assume $j$ ranges from $[0, R)$ and I've computed 
@@ -200,7 +209,7 @@ $
   A times (A_"norm")/(A_"norm" + B_"norm") + B/(A_"norm" + B_"norm")
 $
 
-Clearly, this trick can be repeated, and so we can effectively decompose the summation into arbitrary chunks and stitch them together. You _could_ compute all chunks in parallel, but then you'd essentially be manifesting the full $Q K^top$ matrix again. Instead, you usually compute a column (or a few columns) of that matrix at a time which keeps your memory usage linear. To make this hardware efficient you'll chunk things such that it looks like a bunch of tiny matmuls, like so
+This motivates the following _online_ algorithm. We compute a few columns of the unnormalized attention matrix at a time, a number small enough that the set of Attention columns fits into GPU SRAM. The resulting computation looks like a few matmuls.
 $
   "scale" times exp(mat(
     Q_(i, 0), ..., Q_(i, n); ..., ..., ...; Q_(i + c, 0), ..., Q_(i + c, n)
@@ -213,9 +222,11 @@ $
   ) 
 $
 
-Anyway, this is essentially the algorithm. The full algorithm also accounts for the mask, normalization constant, and does a few tricks to ensure everything remains near the highest precision parts of the floating point representation, but these are relatively small extensions to the above algorithm.
+Then, we advance to the next set of columns, using the aforementioned trick to rescale things as needed. In this way, we never have to write the Attention matrix out to HBM!
 
-=== Ring Attention
+This is almost the entire algorithm. The full algorithm also accounts for the mask, normalization constant, and does a few tricks to ensure everything remains near the highest precision parts of the floating point representation, but these are relatively small extensions to the above algorithm.
+
+=== Ring Attention #urlcite("https://arxiv.org/abs/2310.01889", title: [Ring Attention with Blockwise Transformers for Near-Infinite Context])
 Now, suppose we have a big industry-scale model. At this point even the input tensors $Q, K$ and $V$ are memory bottlenecks. We can avoid holding all of them in memory using a ring-based buffering system. Concretely, give each GPU a chunk of rows to operate on. 
 $
   mat(
@@ -234,10 +245,10 @@ $
   )
 $
 
-Incrementally merge chunks using FlashAttention and boom! You've successfully reduced the memory required per GPU. See #link("https://arxiv.org/pdf/2311.09431")[Striped Attention] for a simple way to save compute on the Causal mask.
+Incrementally merge chunks using FlashAttention and boom! You've successfully reduced the memory required per GPU. See Striped Attention #urlcite("https://arxiv.org/abs/2311.09431", title: [Striped Attention: Faster Ring Attention for Causal Transformers]) for a simple way to save compute on the Causal mask.
 
 === Attention Backward
-I'll slightly rephrase the defintion to make the proof slicker.
+I'll slightly rephrase the definition to make the proof slicker.
 $
   Q = X W_Q quad K = X W_K quad V = X W_V \
   tilde(Q) = "RoPE"(Q) quad tilde(K) = "RoPE"(K) \
@@ -348,44 +359,44 @@ $
   nabla L(V)_j <- nabla L(V)_j + A_(i j)^top G_i
 $
 
-Where the $nabla L(S)^top_(i j)$ term is the $(i, j)$th sub-block, tranposed, not an index into a tranpose. Interestingly, $nabla L(tilde(Q))$ requires reducing $S$ along a different dimension then $nabla L(tilde(K)), nabla L(tilde(V))$, which either requires two passes or using atomics to reduce along one of the dimensions. This is not a problem you see with the forward.
+Where the $nabla L(S)^top_(i j)$ term is the $(i, j)$th sub-block, transposed, not an index into a transpose. Interestingly, $nabla L(tilde(Q))$ requires reducing $S$ along a different dimension than $nabla L(tilde(K)), nabla L(tilde(V))$, which either requires two passes or using atomics to reduce along one of the dimensions. This is not a problem you see with the forward.
 
 === Backwards Ring Attention
 This is very similar to before. Look at the above algorithm. Anything with the $i$ index is not rotated, everything with just the $j$ index is. We perform $T$ iterations, and it's easy to see that every combo $(i, j)$ is encountered, so every term gets computed. Notice that we have two new terms to rotate, the $nabla L(tilde(K)_j)$ and $nabla L(tilde(V)_j)$ terms. 
 
-=== Inference
-Suppose I want to compute Attention over $X'$ where $X' = "cat"(X, X_t)$. This is commonly needed during autoregressive generation where you extend the input sequence by the last token the model outputted. Turns out a lot of the previous computation can be re-used to make this faster then $O(T^2)$. Under causal masking (e.g. the query at $i$ cannot interact with keys for $j > i$) and ignoring normalization...
+=== KV Caching
+Suppose I want to compute Attention over $X'$ where $X' = "cat"(X, X_t)$. This is commonly needed during autoregressive generation where you extend the input sequence by the last token the model outputted. Turns out a lot of the previous computation can be re-used to make this faster than $O(T^2)$. Under causal masking (e.g. the query at $i$ cannot interact with keys for $j > i$) and ignoring normalization...
 $ O =
   "softmax"(mat(
-    Q_0 dot K_0, 0, ...;
-    Q_0 dot K_0, Q_1 dot K_1, ...;
-    ..., ..., ...;
-    Q_i dot K_0, ..., Q_i dot K_i;
+    Q_0 dot K_0, -oo, ..., -oo;
+    Q_1 dot K_0, Q_1 dot K_1, ..., -oo;
+    ..., ..., ..., ...;
+    Q_i dot K_0, Q_i dot K_1, ..., Q_i dot K_i;
    )) V
 $
 
-So, we can see there's only one new row in the matrix, and it can be computed in linear time so long as we held onto the keys and values from before. The set of keys and values we've already computed is called the KV-cache. The optimization as a whole is called KV-caching.
+So, we can see there's only one new row in the matrix, and it can be computed in linear time so long as we held onto the keys and values from before. The set of keys and values we've already computed is called the KV-cache. The optimization as a whole is called KV-caching. #urlcite("https://arxiv.org/abs/1911.02150", title: [Fast Transformer Decoding: One Write-Head is All You Need])
 
 Thus, we can essentially get away with computing
 $
   "softmax"(Q_i dot K_0, ..., Q_i dot K_i) V
 $
 
-Intriguingly, this is invariant to arbitrary permutations of the KV cache. This is handy for implementing Sliding Window Attention efficiently (in fact, it even works with SWA + Speculative Decoding). Or even rearranging the KV cache occasionally for contiguous access.
+Intriguingly, this is invariant to arbitrary permutations of the KV cache. This is handy for implementing Sliding Window Attention #urlcite("https://arxiv.org/abs/2310.06825", title: [Mistral 7B]) efficiently (in fact, it even works with SWA + Speculative Decoding #urlcite("https://arxiv.org/abs/2211.17192", title: [Fast Inference from Transformers via Speculative Decoding])). Or even rearranging the KV cache occasionally for contiguous access.
 
-Once again, we can do the FlashAttention trick of "break the problem up into smaller intervals, then merge them" approach, but since we only have one output to produce, we can go all out with our memory budget and compute all chunks in parallel. 
+Once again, we can do the FlashAttention trick of "break the problem up into smaller intervals, then merge them" approach, but since we only have one output to produce, we can go all out with our memory budget and compute all chunks in parallel. #urlcite("https://crfm.stanford.edu/2023/10/12/flashdecoding.html", title: [Flash-Decoding for long-context inference])
 
 The main bottleneck here is we don't have nearly as much work to do as we did when we were processing the whole sequence outright. During Training we needed to do $O(T^2)$ work but can get away with $O(T)$ memory. Here, we need to do $O(T)$ work but are still using $O(T)$ memory. Thus, the flops/memory ratio is quite bad and our GPU will be underutilized.
 
 This motivates the following rather obvious optimization: _shrink the memory needed from the KV cache_. There are a lot of different strategies you can use to do this.
-- Use a lower-precision KV cache.
-- Use GQA. This method groups attention heads and reuses keys and values across groups.
-- Drop Keys and Values from the cache based on heuristics.
-- Sample Keys and Values from the cache instead of using all of them.
-- There's so many of these omg...
+- Use a lower-precision KV cache. #urlcite("https://arxiv.org/abs/2402.02750", title: [KIVI: A Tuning-Free Asymmetric 2bit Quantization for KV Cache])
+- Use GQA. This method groups attention heads and reuses keys and values across groups. #urlcite("https://arxiv.org/abs/2305.13245", title: [GQA: Training Generalized Multi-Query Transformer Models from Multi-Head Checkpoints])
+- Drop Keys and Values from the cache based on heuristics. #urlcite("https://arxiv.org/abs/2306.14048", title: [H2O: Heavy-Hitter Oracle for Efficient Generative Inference of Large Language Models])
+- Sample Keys and Values from the cache instead of using all of them. #urlcite("https://arxiv.org/abs/2410.16179", title: [MagicPIG: LSH Sampling for Efficient LLM Generation])
+- There are so many of these omg...
 
 == FFN
-In Transformers, *FFN* usually refers to a very specific type of feed-forward network. Specifically a 2-layer SWIGLU MLP, defined as follows.
+In Transformers, *FFN* usually refers to a very specific type of feed-forward network. Specifically a 2-layer SWIGLU MLP, defined as follows. #urlcite("https://arxiv.org/abs/2002.05202", title: [GLU Variants Improve Transformer])
 $
   "FFN"(X) = ("swish"(X W_"gate") dot.o X W_"up")W_"down"
 $
@@ -423,7 +434,7 @@ $
 ))
 
 
-swish is an elementwise function that looks almost like a ReLU but is differentiable everywhere and tends to be a little bit easier to optimize. Conceptually, the swish function _gates_ how much of each input we should keep, hence the naming. $W_"up"$ has that name because it typically projects the input up from dimension $D$ to dimension $F$, where typically $F approx 4 D$, and $W_"down"$ similarly maps from a larger inner dimension back down.
+swish is an elementwise function that looks almost like a ReLU but is differentiable everywhere and tends to be a little bit easier to optimize. #urlcite("https://arxiv.org/abs/1710.05941", title: [Searching for Activation Functions]) Conceptually, the swish function _gates_ how much of each input we should keep, hence the naming. $W_"up"$ has that name because it typically projects the input up from dimension $D$ to dimension $F$, where typically $F approx 4 D$, and $W_"down"$ similarly maps from a larger inner dimension back down.
 
 Intriguingly, because we map up to $F approx 4 D$, this layer is often _most of the work in a transformer_! For some quick napkin math...
 $
@@ -434,8 +445,8 @@ $
 
 So $S > 8 D$ in order for attention to dominate. This is interesting. For larger models, which typically have higher $D$, let's say $D approx 10k$, this corresponds to pretty large sequences on the order of $80k$ elements. During Pre-Training you usually use much smaller sequences, during Inference at long contexts such lengths are more likely. However, if you are serving a smaller model, or a model with a more expensive attention mechanism, the tipping point can come way earlier.
 
-=== MOEs
-With LLMs, one of the easiest ways to improve performance is scaling the number of parameters. However, increasing the number of parameters often correspondingly increases the amount of compute you end up doing! MOEs can be thought of as work-around. In a nutshell, they let you train a large number of FFNs (defined the same way as above) called _experts_. During training and inference, only a subset of these experts fire, decoupling compute from parameters. A _router_ is used to choose which experts to send the token too, it's usually something like a linear mapping following by Top-K.
+=== MOEs #urlcite("https://arxiv.org/abs/1701.06538", title: [Outrageously Large Neural Networks: The Sparsely-Gated Mixture-of-Experts Layer])
+With LLMs, one of the easiest ways to improve performance is scaling the number of parameters. #urlcite("https://arxiv.org/abs/2001.08361", title: [Scaling Laws for Neural Language Models]) However, increasing the number of parameters often correspondingly increases the amount of compute you end up doing! MOEs can be thought of as a work-around. In a nutshell, they let you train a large number of FFNs (defined the same way as above) called _experts_. During training and inference, only a subset of these experts fire, decoupling compute from parameters. A _router_ is used to choose which experts to send the token to, it's usually something like a linear mapping followed by Top-K.
 
 
 #align(center, diagram(
@@ -470,15 +481,15 @@ With LLMs, one of the easiest ways to improve performance is scaling the number 
   edge(<sum>, <out>, "-|>"),
 ))
 
-You can also make experts which all tokens are routed too, called _shared_ experts, with the thinking being it avoids redundant computation across experts.
+You can also make experts which all tokens are routed to, called _shared_ experts, with the thinking being it avoids redundant computation across experts. #urlcite("https://arxiv.org/abs/2401.06066", title: [DeepSeekMoE: Towards Ultimate Expert Specialization in Mixture-of-Experts Language Models])
 
 = Scaling #urlcite("https://jax-ml.github.io/scaling-book/", title: [The Jax Scaling Book])
 When you start making models bigger, you quickly start running into a lot of performance bottlenecks. Your main avenue for addressing them is to somehow share the load across more and more GPUs, but this is non-trivial as naive approaches will bottleneck the model computation on communicating between GPUs. This motivates a lot of interesting parallelism strategies.
 
 - *Data Parallelism (DP)*
-  - Process batches in parallel, then average the gradients.
+  - Process batches in parallel, then average the gradients. #urlcite("https://docs.pytorch.org/docs/stable/notes/ddp.html", title: [PyTorch Distributed Data Parallel Design])
 - *Pipeline Parallelism (PP)*:
-  - Host different layers on different GPUs, pass the outputs of one layer to the GPUs hosting the next.
+  - Host different layers on different GPUs, pass the outputs of one layer to the GPUs hosting the next. #urlcite("https://arxiv.org/abs/1811.06965", title: [GPipe: Efficient Training of Giant Neural Networks using Pipeline Parallelism])
 - *Tensor Parallelism (TP)*:
   - Divide the operation (typically a matmul) into chunks i.e.
     $
@@ -547,7 +558,7 @@ We are going to organize our GPUs into a _mesh_. A mesh is a conceptual organiza
   node((1, 2.75), [$Y$-axis group], stroke: none, fill: none),
 ))
 
-Now we can define our notation. We'll define $A[B, C, ...]$ to define the tensor $A$ which has the logical dimensions, $B$, $C$, and anything else I've listed. If we write a subscript underneath a dimension, e.g. $B_X$ this means we are partitioning that dimension across the axis indicated by the subscript. If we add multiple subscripts, we partition across multiple axes, if we add no subscripts, we don't partition, we replicate. See #link("https://jax-ml.github.io/scaling-book/")[The Jax Scaling Book] for more illustrations.
+Now we can define our notation. We'll define $A[B, C, ...]$ to define the tensor $A$ which has the logical dimensions, $B$, $C$, and anything else I've listed. If we write a subscript underneath a dimension, e.g. $B_X$ this means we are partitioning that dimension across the axis indicated by the subscript. If we add multiple subscripts, we partition across multiple axes, if we add no subscripts, we don't partition, we replicate. See The Jax Scaling Book #urlcite("https://jax-ml.github.io/scaling-book/sharding/", title: [Sharded Matrices and How to Multiply Them]) for more illustrations.
 
 Anyway, it's easy to define an algebra using these. Let $A B = C$.
 $ A[B_X, D] times_D B[D, F_Y] = C[B_X, F_Y] $
@@ -571,9 +582,9 @@ $ A[B, D_X] times_D B[D_X, F] = C[B, F]{U_X} $
 
 Where ${U_X}$ means we have to sum along the $X$ axis to obtain $C$. The argument is similar, except now you're taking an inner product instead of an outer product.
 
-Generally, the two equations can be overlayed, but inputs of the form $A[B_X, D_X]$ are not allowed, they don't contain the whole matrix (just a blocked diagonal) so it is not possible to form valid matrix products with them.
+Generally, the two equations can be overlaid, but inputs of the form $A[B_X, D_X]$ are not allowed, they don't contain the whole matrix (just a blocked diagonal) so it is not possible to form valid matrix products with them.
 
-Finally, if you want to convert your matrix from one form to another, you need communications!
+Finally, if you want to convert your matrix from one form to another, you need communications! #urlcite("https://docs.nvidia.com/deeplearning/nccl/user-guide/docs/usage/collectives.html", title: [NCCL Collective Operations])
 $ 
   "AllToAll"_(B, D) A[B_X, D] => A[B, D_X] \
   "AllGather"_X (A[B_X, D]) => A[B, D] \
@@ -587,7 +598,7 @@ $
   alt: "Animated comparison of AllGather, ReduceScatter, AllReduce, and AllToAll across four fully connected GPUs, showing data transfers, reductions, final layouts, and bytes sent per GPU.",
 ))
 
-The speed of these primitives depend on the network topology you are running on. If everything is connected to everything, it's easy to understand their costs. Let $S$ by the number of bytes in $A[B, D]$.
+The speed of these primitives depends on the network topology you are running on. If everything is connected to everything, it's easy to understand their costs. Let $S$ be the number of bytes in $A[B, D]$.
 + $"AllGather"_X (A[B_X, D]) => A[B, D]$ \
   Communicate your shard to every GPU that's not you. $(S slash P) times (P - 1)$.
 + $"ReduceScatter"_(B) (A[B, D]{U_X}) => A[B_X, D]$ \
@@ -604,7 +615,7 @@ It's very important to prevent communications from bottlenecking the model's com
 
 The easiest case is where you gather an existing tensor, say a weight tensor or an activation tensor during the BWD. Since you know the tensor in advance, you can dispatch the communication primitive asynchronously allowing it to overlap with model computation.
 
-Sometimes though, you need to gather a tensor which was just made: an activation tensor during the FWD, a gradient tensor during the BWD. Overlap in this case requires more fine-grained cooperation. The technique needed is called a Collective GEMM. Let's go through some cases.
+Sometimes though, you need to gather a tensor which was just made: an activation tensor during the FWD, a gradient tensor during the BWD. Overlap in this case requires more fine-grained cooperation. The technique needed is called a Collective GEMM. #urlcite("https://arxiv.org/abs/2406.06858", title: [FLUX: Fast Software-based Communication Overlap On GPUs Through Kernel Fusion]) Let's go through some cases.
 
 #align(center, image(
   "../img/collective-gemms.gif",
@@ -643,7 +654,7 @@ $
  "AllToAll"(A[B, S_X, D]) = A[B_X, S, D] \
  A[B_X, S, D] times_D B[D, F] = C[B_X, S, F]\
 $
-To overlap, again just process chunks as soon as they arrive. Cursor's MOE kernel allows the GPUs which are receiving data to pull data, instead of the senders just _pushing_ all their data up-front, which enables fine-grained pipelining (e.g. you can issue a network request as soon as you finish computing a GEMM tile). The reverse (GEMM followed by All-To-All) is similar but is led by the sender.
+To overlap, again just process chunks as soon as they arrive. Cursor's MOE kernel #urlcite("https://arxiv.org/abs/2609.36070", title: [Mixture-of-Kittens: MoE Megakernel for NVL72s]) allows the GPUs which are receiving data to pull data, instead of the senders just _pushing_ all their data up-front, which enables fine-grained pipelining (e.g. you can issue a network request as soon as you finish computing a GEMM tile). The reverse (GEMM followed by All-To-All) is similar but is led by the sender.
 
 == Parallelism Schemes
 Before we can parallelize the Transformer, we need a high-level overview of the matmuls involved.
@@ -696,7 +707,7 @@ $
    Y[B, G_X, H, S, D H] times_(G, H, D H) W_O [G_X, H, D H, D] = X[B, S, D]{U_X}
 $
 
-Being able to reduce-scatter into whatever dimensions works best makes this pretty flexible. Another way you could do this is to just replicate $W_O$, and use an AllToAll to swap the sharding on $G$ for sharding on $B$.
+Being able to reduce-scatter into whatever dimensions work best makes this pretty flexible. Another way you could do this is to just replicate $W_O$, and use an AllToAll to swap the sharding on $G$ for sharding on $B$.
 
 The main drawback with this approach is you might not have that many groups to shard and the reduce-scatter might require high communication bandwidth.
 
@@ -713,14 +724,14 @@ $
 The main drawback with this approach is it requires _communicating_ KV across GPUs, expensive!
 
 A few things worth noting.
-- During inference, $S = 1$, so you end replicating $Q$.
+- During inference, $S = 1$, so you end up replicating $Q$.
 - This is the same as Ring and Striped Attention, Ring Attention is how we overlap the AllGathers with the communication. Striped Attention is what you get if you don't give each GPU contiguous KV slices, and instead distribute KVs in a round-robin fashion, which distributes the causal mask savings evenly across the GPUs.
 
 
-The main appeal of this scheme it reduce per-request latency but unlike head parallelism, which can only parallelize as far as the group size, this scheme can continue subdividing so long as $L_X$ is large enough. So, if you want to make a low-latency inference deployment, this is a very appealing option. This can also trivially be combined with head parallelism.
+The main appeal of this scheme is that it reduces per-request latency but unlike head parallelism, which can only parallelize as far as the group size, this scheme can continue subdividing so long as $L_X$ is large enough. So, if you want to make a low-latency inference deployment, this is a very appealing option. This can also trivially be combined with head parallelism.
 
 === Mesh Attention
-Shard $S$ and $L$ along different axis.
+Shard $S$ and $L$ along different axes.
 $
   underline(Q[B, G, H, S_X, D H] times_(D H) K[B, G, L_Y, D H] times_(L)  V[B, G, L_Y, D H] => Y[B, G, H, S_X, D H]) \
   Q[B, G, H, S_X, D H] times_(D H) K[B, G, L_Y, D H] times_(L)  V[B, G, L_Y, D H] = Y[B, G, H, S_X, D H]{U_Y} \
@@ -728,7 +739,7 @@ $
 $
 There's a smidge more communication needed here than shown above, because you need to communicate normalization statistics. However, you only need to communicate a few scalars per row, so this is not a bottleneck. Note the interesting part about this scheme: _communication does not scale with the KV cache_! However, you do end up having to replicate the KV cache across nodes (which can be done asynchronously) so if memory is a constraint this is more of a problem.
 
-=== DeepSpeed-Ulysses
+=== DeepSpeed-Ulysses #urlcite("https://arxiv.org/abs/2309.14509", title: [DeepSpeed Ulysses: System Optimizations for Enabling Training of Extreme Long Sequence Transformer Models])
 Again, try sharding $S$ and $L$, but we'll use a slightly different communication strategy.
 $
   underline(Q[B, G, H, S_X, D H] times_(D H) K[B, G, L_X, D H] times_(L)  V[B, G, L_X, D H] => Y[B, G, H, S_X, D H]) \
@@ -743,7 +754,7 @@ $
   Y[B, G, H, S_X, D H]  times_(G, H, D H) W_O [G, H, D H, D] = X[B, S_X, D]
 $
 
-By doing this, we've inherited the advantages and drawbacks of HP, but we've essentially replaced one reduce-scatter with four all-to-alls, which allows our communication costs to _shrink_ as we add more GPUs. One more optimization: during inference, you only need to compute the latest KV, and the pre-existing KVs will can live on their respective shards. This makes the communication overhead as if $L_X = S_X$, a big win!
+By doing this, we've inherited the advantages and drawbacks of HP, but we've essentially replaced one reduce-scatter with four all-to-alls, which allows our communication costs to _shrink_ as we add more GPUs. One more optimization: during inference, you only need to compute the latest KV, and the pre-existing KVs can live on their respective shards. This makes the communication overhead as if $L_X = S_X$, a big win!
 
 === Mystery Scheme
 Try sharding $B$ and $L$.
@@ -754,13 +765,11 @@ $
   "ReduceScatter"(Y[B, G, H, S, D H]{U_X}) = Y[B_X, G, H, S, D H]
 $
 
-This is very strange looking, why would you ever want to do this? Well, what if this is inference and the KVs are _large and uneven_. Sharding by batch dimension as data parallelism does would result in some GPUs absorbing a ton of sequence memory and some GPUs absorbing very little. The same load-imbalance could happen for compute too! Well what about Context Parallelism? Context Parallelism will force replication of the queries because $S = 1$, potentially expensive. You cannot ring-reduce without replicating $Q$ naively. The insight is what if we kept $K V$ in place and then moved $Q$ around using the batch dimension to introduce parallelism where the sequence dimension is lacking. At the end of this process, the KVs will still be on separate GPUs, but (provided we also circulate the normalizing statistics) we will have computed everything needed for that tile, so all that remains is a reduction. The advantage is this works like Context-Parallel except you don't need to replicate $Q$.
-
-Interestingly, I found out Meta also came up with this scheme, calling it Ring Pass-Q.
+This is very strange looking, why would you ever want to do this? Well, what if you want to do Context Parallelism during Decode, but replicating the activations on every node (which is what is needed to compute Q locally) is just not feasible? Then the best you can hope to do is compute a fragment of Q on every node, and pass it around. Interestingly, I found out Meta also came up with this scheme, calling it Ring Pass-Q. #urlcite("https://arxiv.org/abs/2411.01783", title: [Context Parallelism for Scalable Million-Token Inference])
 
 == FFN
 The FFN is a relatively simple operation, but it has a few notable differences from Attention.
-- It can be worthwhile shattering the reduction dimension. You rarely see people do this with Attention because the reduction dimension is already pretty tiny as it is split between the heads.
+- It can be worthwhile sharding the reduction dimension. You rarely see people do this with Attention because the reduction dimension is already pretty tiny as it is split between the heads.
 - The two consecutive matmuls can have different communication volumes, which makes hybrid sharding more appealing.
 
 === Data Parallelism
@@ -770,7 +779,7 @@ $
 $
 The main cost of this scheme is being forced to replicate weights. 
 
-=== FSDP
+=== FSDP #urlcite("https://arxiv.org/abs/2304.11277", title: [PyTorch FSDP: Experiences on Scaling Fully Sharded Data Parallel])
 What if we do data-parallel with batch-sharded activations, but also shard the weights?
 $
   underline(X[B_X, S, D] times_D W_"up" [D_X, F] times_F W_"down" [F_X, D] => O[B_X, S, D]) \
@@ -778,10 +787,10 @@ $
   "AllGather"(W_"down" [F_X, D]) = W_"down" [F, D] \
   X[B_X, S, D] times_D W_"up" [D, F] times_F W_"down" [F, D] = O[B_X, S, D]
 $
-The main advantage of this scheme is it's essentially data-parallel but with much lower memory usage. The main drawback is we now have to gather the weights. This gives us a communication volume of $approx 2 D F$. However... we can actually do the gathers ahead of time for very little communication overhead. This is one optimization employed by the ZeRO optimizer to reduce Transformer memory usage. You can also do a similar trick with optimizer state and gradients. It's not very good during inference, since inference is usually memory bound and loading the weights is a large portion of the bottleneck.
+The main advantage of this scheme is it's essentially data-parallel but with much lower memory usage. The main drawback is we now have to gather the weights. This gives us a communication volume of $approx 2 D F$. However... we can actually do the gathers ahead of time for very little communication overhead. This is one optimization employed by the ZeRO optimizer #urlcite("https://arxiv.org/abs/1910.02054", title: [ZeRO: Memory Optimizations Toward Training Trillion Parameter Models]) to reduce Transformer memory usage. You can also do a similar trick with optimizer state and gradients. It's not very good during inference, since inference is usually memory bound and loading the weights is a large portion of the bottleneck.
 
 
-=== Tensor Parallelism
+=== Tensor Parallelism #urlcite("https://arxiv.org/abs/1909.08053", title: [Megatron-LM: Training Multi-Billion Parameter Language Models Using Model Parallelism])
 What if we shard the weights along $F$?
 $
   underline(X[B, S, D] times_D W_"up" [D, F_X] times_F W_"down" [F_X, D] => O[B, S, D]) \
@@ -814,9 +823,9 @@ For a total communication volume of...
 $
   approx (4 B S sqrt(D F)) / sqrt(P) 
 $
-Intriguingly, this becomes more efficient the more GPUs you have, which is not a property our implementation of TP has. Thus, the scheme is asymptotically more efficient than TP. See #link("https://arxiv.org/abs/2211.05102")[this paper] for a more detailed analysis of this algorithm.
+Intriguingly, this becomes more efficient the more GPUs you have, which is not a property our implementation of TP has. Thus, the scheme is asymptotically more efficient than TP. See Efficiently Scaling Transformer Inference #urlcite("https://arxiv.org/abs/2211.05102", title: [Efficiently Scaling Transformer Inference]) for a more detailed analysis of this algorithm.
 
-=== TP + FSDP
+=== TP + FSDP #urlcite("https://jax-ml.github.io/scaling-book/training/", title: [How to Parallelize a Transformer for Training])
 This is pretty similar to 2D weight stationary, except this time we're ok with moving both the activations and the weights around.
 $
   underline(X[B_X, S, D] times_D W_"up" [D_X, F_Y] times_F W_"down" [F_Y, D_X] => O[B_X, S, D]) \
@@ -883,12 +892,12 @@ $
 
 So we beat FSDP + TP at small batch sizes, and 2D at large batch sizes, which are the opposite of when each regime is dominant, and so our scheme is never dominant. However, if we replicate $W_"down"$ (removing the all-gather) we end up permanently in the second regime which lets us win at small batch sizes.
 
-What's interesting about all the schemes we have seen before is that they are all optimal in terms of communication volume given _some_ values for $B$, $D$ and $F$, so from a communication standpoint the true optimal algorithm is a hybrid algorithm. It's worth noting optimizing for communication volume isn't always the best way of looking at things. Matrix multiplication will scale linearly with respect to both the activations and the weights, so at a large enough batch size it will eclipse the communication costs. Ideally, you only want to use a given scheme only when the computation costs eclipse the communication costs. This gives each scheme a "minimum feasible batch size" which can change which schemes are dominant where.
+What's interesting about all the schemes we have seen before is that they are all optimal in terms of communication volume given _some_ values for $B$, $D$ and $F$, so from a communication standpoint the true optimal algorithm is a hybrid algorithm. It's worth noting optimizing for communication volume isn't always the best way of looking at things. Matrix multiplication will scale linearly with respect to both the activations and the weights, so at a large enough batch size it will eclipse the communication costs. Ideally, you only want to use a given scheme when the computation costs eclipse the communication costs. This gives each scheme a "minimum feasible batch size" which can change which schemes are dominant where.
 
 == MOE
 MOEs are built out of FFNs, but they split computation across many experts. This results in a much smaller $F$ dimension (making traditional TP hard) and motivates very different parallelism strategies.
 
-=== Expert Parallelism
+=== Expert Parallelism #urlcite("https://arxiv.org/abs/2006.16668", title: [GShard: Scaling Giant Models with Conditional Computation and Automatic Sharding])
 Reinterpret the $X$ buffer as telling you for each (Sequence, Expert) pair, what token do you send? In reality, you use Ragged Buffers, this is just a simplification to make it expressible with our syntax.
 $
   underline(X[B, S_X, E, D] times_D W_"up" [E, D, F] times_(F) W_"down" [E, F, D] => O[B, S_X, D]) \ 
@@ -897,9 +906,9 @@ $
   "AllToAll"(O[B, S, E_X, D]) = O[B, S_X, E, D] \
   sum_E O[B, S_X, E, D] = O[B, S_X, D]
 $
-What's the point of this scheme? A much simpler strategy is to use Tensor Parallelism, but TP shards a (typically much smaller) reduction dimension, leading to poor utilization. TP also requires AllGathers and ReduceScatters over the activations, which is more expensive than AllToAlls. On the other hand, $E P$ does poor when you have small batches, but the larger the batch you have the more efficiently the expert-local GEMMs become.
+What's the point of this scheme? A much simpler strategy is to use Tensor Parallelism, but TP shards a (typically much smaller) reduction dimension, leading to poor utilization. TP also requires AllGathers and ReduceScatters over the activations, which is more expensive than AllToAlls. On the other hand, $E P$ does poorly when you have small batches, but the larger the batch you have the more efficient the expert-local GEMMs become.
 
-=== Distributed Weight Data Parallelism
+=== Distributed Weight Data Parallelism #urlcite("https://nvidia.github.io/TensorRT-LLM/1.4.0rc0/blogs/tech_blog/blog19_DWDP_Distributed_Weight_Data_Parallelism_for_High_Performance_LLM_Inference_on_NVL72.html", title: [DWDP: Distributed Weight Data Parallelism for High-Performance LLM Inference on NVL72])
 Use the same reinterpretation as before, but this time we'll solve it differently. 
 $
   underline(X[B_X, S, E, D] times_D W_"up" [E_X, D, F] times_(F) W_"down" [E_X, F, D] => O[B_X, S, D]) \
@@ -913,13 +922,175 @@ As usual, you should treat the all-gather followed by the matmul as one fused op
 
 This becomes advantageous relative to EP when moving the weights has less memory traffic than moving the activations. It also doesn't require synchronization unlike the Expert Parallelism, e.g. each GPU computes its shard independently from the rest. If you pipe this into a scheme like DPA, you actually never need to synchronize between the replicas at all!
 
+= Serving
+We know what a model is, and we know a million ways to slap it onto a bunch of GPUs. How do we start serving LLMs at production scale?
+
+First, we have to understand that inference is composed of two pieces: _prefill_ and _decode_. #urlcite("https://jax-ml.github.io/scaling-book/inference/", title: [All About Transformer Inference]) 
+
+#align(center, graphic(serving.decode()))
+
+Decode is where we auto-regressively decode tokens, one by one, until the model outputs an end-of-sequence token or reaches its output length. Naively, the Attention operator over $T$ tokens costs $O(T^2)$ time which would make decoding $T$ tokens take $O(T^3)$ time. This is ridiculously expensive so the KV-caching trick is _essential_ here. 
+
+#align(center, graphic(serving.prefill()))
+
+So what's prefill then? Well, in order to start decoding we need all the relevant keys and values. But when a user sends us a request, we don't have any keys and values cached. So the job of prefill is to process the entire input context and output all the needed keys and values.
+
+These two tasks have some important differences! To see why, let's analyze compute and memory. Take $B$ to be the batch size, $S$ to be the length of the queries, $L$ to be the length of the KV-cache, and $D$ to be model-dimension.
+- Attention does $O(B S L D)$ work and reads $O(B D (L + S))$ memory.
+- The FFN does $O(B S D^2)$ work and reads $O(B S D + D^2)$ memory.
+
+To get a high ratio of flops/memory (essential for being able to hide low memory bandwidth) you need $S$ to be large during attention, and you need $B S$ to be large during the FFN layer. During prefill $S$ is large, but during decode $S$ is $1$! This means it's challenging to make both the Attention and the Decode layer efficiently use modern hardware.
+
+This gives us two requirements for high-performance inference.
+- We need to avoid recomputing Keys and Values as much as possible.
+- We need tricks to improve the flops/memory ratio of decode.
+  - Large Batch Sizes
+  - Multi-Token Prediction
+  - Architecture Tricks
+
+== The Art of KV-Caching
+At first glance, KV-caching is relatively simple. You simply store the keys and values as soon as you compute them. However, there are a few complications.
+
+=== Cache Management
+The first is that we only have so much GPU memory, which already has a lot of space taken up by the model weights. How can we afford to store the KV-cache for every single request? Well, often we cannot. But this is ok! KV-caching is an _optimization_, it prevents us from doing redundant work. But worst case, we can evict our KV-cache, and reprefill the relevant content using the transcript of the conversation. Thus, we can literally treat the set of KVs as a cache and adopt some kind of eviction policy, like Least-Recently-Used. #urlcite("https://docs.sglang.io/docs/advanced_features/radix_eviction_policy", title: [SGLang Radix Cache Eviction Policies]) Depending on the speed of our CPU interconnect and distributed file system (DFS) we may also be able to offload keys and values out of GPU memory into slower but bigger storage, only fetching the keys and values when necessary. This optimization is known as a Hierarchical Cache, commonly just called Hi-Cache. #urlcite("https://docs.sglang.io/docs/advanced_features/hicache_design", title: [SGLang HiCache System Design and Optimization])
+
+You can make caching even more powerful by making the following observation: at any given point in time, the GPU only needs the KV for the _layer_ that is currently running. Thus, if you are clever, you can stream in the KV-cache for the upcoming layer just in time, allowing a massive increase in the batch size you can hold at any one time. This optimization is used in a lot of places but I first saw it in MoonCake. #urlcite("https://arxiv.org/abs/2407.00079", title: [Mooncake: A KVCache-centric Disaggregated Architecture for LLM Serving])
+
+What happens when you add multiple GPUs into the mix? Well, typically the strategy is going to be to route to the GPU that has the relevant KV. This is known as _Sticky Routing_. #urlcite("https://docs.sglang.io/docs/advanced_features/sgl_model_gateway", title: [SGLang Model Gateway: Cache-Aware Load Balancing]) Sticky routing is a little tricky though, because it prevents you from balancing load across GPUs. I've seen two solutions. The first is simple, simply have a scheduler compare three approaches
+- Use Sticky Routing
+- Route to another GPU and move the KV cache over
+- Route to another GPU and reprefill the transcript
+
+Thus, if a GPU gets really overloaded, you can use one of the backup options to distribute load. The second approach is to engineer your architecture such that your KV memory is really small. DeepSeekV4 #urlcite("https://arxiv.org/abs/2606.19348", title: [DeepSeek-V4: Towards Highly Efficient Million-Token Context Intelligence]) only needs to store $approx 800$ bytes per token for KV-caching (normal numbers are orders of magnitude larger). This is so low that they can afford to stream the KV-cache from their Distributed-File-System to whatever GPU needs it on the fly: no sticky routing at all!
+
+=== Memory Management
+#align(center, graphic(serving.paged-kv()))
+Eviction lets us expand the number of requests and context we can deal with, but now we have a new problem: all these repeated KV allocations and frees will result in horrific memory fragmentation which will limit how much usable memory we have available. To combat this, we use a well-known trick: a pool allocator. Pool Allocators divide their memory allocation into fixed-size blocks. The fixed-size blocks can cause you to sometimes end up with internal fragmentation, but it comes with the major advantage of no external fragmentation (not to mention the allocation algorithm is way simpler). There's a tradeoff with the block size you should use. The smaller the block, the less internal fragmentation but the harder your GPU will have to work to assemble the tensor for processing. Thus, we typically use large, fixed-size blocks called _pages_ which balance the two costs. The credit for this idea goes to Paged Attention. #urlcite("https://arxiv.org/abs/2309.06180", title: [Efficient Memory Management for Large Language Model Serving with PagedAttention])
+
+=== Radix Attention
+There's one last trick we can do. It's often the case that many _different_ requests share prefixes. Ideally you would be able to take advantage of this by making one big cache across requests. I've seen two approaches for how to implement such a cache.
+- Process the request a block of tokens at a time. For each block compute
+  $
+    "HASH"("BLOCK") = f("BLOCK", "HASH"("BLOCK"_"prev"))
+  $
+  This gives you a context-sensitive hash which you can use to index a hashtable. This is what VLLM does. #urlcite("https://docs.vllm.ai/en/latest/design/prefix_caching/", title: [vLLM Automatic Prefix Caching])
+- Construct a Trie over request tokens, and simply walk the trie to recover the necessary KV. This is the approach SGLang takes. #urlcite("https://arxiv.org/abs/2312.07104", title: [SGLang: Efficient Execution of Structured Language Model Programs])
+
+The combination of all these techniques lets some production systems hit $95%$ cache hit rates. That may seem high, but remember that in a conversation, all the previous messages you sent are "previous context". Thus, individual messages you have with an LLM are reread for every single message you send.
+
+== Batching
+As mentioned before, to reach high GPU efficiency during decode you need a big batch size. However, naively decoding a batch until it finishes will result in the batch size gradually shrinking as you go along. 
+
+#align(center, graphic(serving.batching()))
+
+This motivates a simple trick, also commonly seen in RL-rollouts: whichever batch index just finished executing, start processing new work there. #urlcite("https://www.usenix.org/conference/osdi22/presentation/yu", title: [Orca: A Distributed Serving System for Transformer-Based Generative Models]) The idea is simple, but we need a few things.
+- The KV cache for the new request has to be moved in.
+- We need a scheduler that manages per-request state.
+- We have to perform _ragged_ Attention.
+- We have to balance prefill and decode.
+
+The first two are relatively straightforward. _Ragged_ Attention is just Attention that allows each request to have different length KV-caches. The reason this is a "new" thing, is that typically PyTorch kernels are designed for nice, homogenous, rectangular tensors. Before _Ragged Attention_, what you would typically see is padding the prompts as follows 
+
+#align(center, graphic(serving.padded-prompts()))
+
+So that the KV cache was one nice, friendly rectangle. While the observation that you shouldn't have to pad requests was relatively obvious, fixing it is tricky. You need to write low-level GPU code in order to express this unorthodox operation. Furthermore, since requests now have different KV-lengths, a naive approach would end up bottlenecking the entire execution based on how long the longest sequence was. An _efficient_ algorithm would need some way to partition the work evenly across the GPU's many hardware units, _despite the requests themselves being uneven_. The trick is something we've seen a few times at this point, which is that you can split the softmax $Q K^T$ work into independent tiles which you can stitch together. By breaking up the workload into tiles, we can evenly distribute tiles among the GPU's units, allowing for a much faster algorithm. The approach that pioneered this was FlashDecoding, but even that approach still had some load balancing issues. More modern approaches have gone as far as to write dynamic load-balancers on the GPU to further smooth out the load balance (FlashInfer). #urlcite("https://arxiv.org/abs/2501.01005", title: [FlashInfer: Efficient and Customizable Attention Engine for LLM Inference Serving])
+
+Finally, we now have to balance prefill and decode. Before, we could have conceptually done something like prefill a batch, decode the batch, in a loop. Now, our decodes never end, we're always bringing in more requests. There are two competing approaches.
+- Run Prefill and Decode _at the same time_.
+- Prefill-Decode Disaggregation.
+
+=== Chunked Prefill #urlcite("https://arxiv.org/abs/2308.16369", title: [SARATHI: Efficient LLM Inference by Piggybacking Decodes with Chunked Prefills])
+How do we run prefill and decode at the same time? The trick is observing that prefill can be computed with almost the same kernel used in decode! See, the decode kernel says for each request, based on your current KV, here's the corresponding output. Conceptually, you can imagine consecutive tokens in prefill as being separate requests with overlapping context.
+
+#align(center, graphic(serving.prefill-queries()))
+
+Thus, you can use the same kernel which handles decoding to handle prefilling too! Of course, in practice you'll still need a new kernel because the FlashDecode kernel assumes the KV-caches of each request are independent, but you get the idea. 
+
+#align(center, graphic(serving.chunked-prefill()))
+
+A problem you will run into with this approach is that prefills can take very long, which could slow down individual decodes. A commonly used approach is called Chunked Prefill, where you split the prefill into large chunks and do it over multiple steps instead of all at once. This slightly reduces the efficiency of Prefilling but makes decoding much more reliable. Chunked Prefill was introduced in Sarathi-Serve. #urlcite("https://arxiv.org/abs/2403.02310", title: [Taming Throughput-Latency Tradeoff in LLM Inference with Sarathi-Serve])
+
+=== Prefill Decode Disaggregation #urlcite("https://arxiv.org/abs/2401.09670", title: [DistServe: Disaggregating Prefill and Decoding for Goodput-optimized Large Language Model Serving])
+At a surface level, this approach is really simple. You simply dedicate some GPUs to doing prefill and some GPUs to doing decode. The catch is that sometimes you might not have much prefill work causing your prefill GPUs to idle, and similarly for Decode. The main advantage is that prefill doesn't interfere with decode, so even if you have a lot of prefill work decode will still move at a regular cadence. Intuitively, you are trading throughput and flexibility for reliability. 
+
+That being said, there are ways to make PD more elastic. 
+- You can dynamically migrate workers from the prefill configuration to the decode configuration. This requires a bit of work. If the prefill workers were cooperatively ring-rotating the KV around for context parallelism, you need to hand off your KV cache. Similarly, if you are joining a ring you need to be given the relevant KV. Elastic Sequence Parallelism proposes a zero-overhead scheme for this, where during ring reductions you just hold onto the relevant KV you need. #urlcite("https://arxiv.org/abs/2404.09526", title: [LoongServe: Efficiently Serving Long-Context Large Language Models with Elastic Sequence Parallelism]) 
+- You can run chunked prefill on the separate workers, but with a twist, workers in the prefill configuration will be allowed to process more prefill chunks at a time while workers on the decode configuration will have a lower cap. The main advantage with this scheme is that the number of prefill chunks you are allowed to process can be changed super easily!
+
+== Multi-Token Prediction
+We observed at the beginning of this section that because we are only outputting a single token at a time, the attention operation is inherently inefficient. What if we could output more than one token at a time? Indeed, there are some architectures which allow for this but these aren't my focus here. #urlcite("https://arxiv.org/abs/2404.19737", title: [Better & Faster Large Language Models via Multi-token Prediction]) Instead, I'm going to talk about a family of techniques that work on pretty much _any_ architecture. #urlcite("https://arxiv.org/abs/2211.17192", title: [Fast Inference from Transformers via Speculative Decoding])
+
+This is a little complicated to explain, so we're going to work up to it with a few ideas that don't work.
+
+=== Attempt 1
+#align(center, graphic(serving.speculative-attempt()))
+
+Append $K$ random tokens to the _target_ model's context. Evaluate the _target_ on the new context, to get $K$ _distributions_, one for right after the start of the context, one for a token later, etc. Sample from those distributions sequentially. If the sampled token matches the corresponding random token, keep going, otherwise stop. 
+
+This works but what are the odds your randomly selected token matches the token the model actually sampled? Probably pretty low, so this doesn't help too much.
+
+=== Attempt 2
+Get a small "draft" model to "guess" what the next few tokens the _target_ will output are. Then do the same approach as before. If you trained the model to roughly output the same distribution the LLM would, then you should get much higher acceptance rates.
+
+The main problem is that the token you sample from the draft model and the token you sample from the base model have to agree exactly. What if the base model only puts max $5%$ probability on any token? Then your odds of matching any tokens (aside from the first one) are merely $5%$. 
+
+=== Attempt 3 #urlcite("https://arxiv.org/abs/2302.01318", title: [Accelerating Large Language Model Decoding with Speculative Sampling])
+We need a less fragile way to sample that doesn't require exact matches between the draft and the target models. Suppose for a given token, the draft model outputs the distribution $q$ and the target model outputs the distribution $p$. The trick is going to be, instead of sampling from $p$, sample from $q$ most of the time and a "backup" distribution otherwise. We can arrange this to be equivalent to sampling from $p$. Since most of the time we just accept the sample from $q$, this gets rid of our problem!
+
+To see how to do this, observe for a given token $x$, there are two cases:
+$
+  cases(q(x) <= p(x), q(x) > p(x))
+$
+
+Now, suppose every time the first condition was true, we just accepted the token. The problem would be the drafter allocates _too little_ probability to that token. That's where the second distribution comes in. When the second case happens, we can occasionally throw away the sample and sample from some new distribution which puts the right amount of mass on all entries of $p$ that meet the second criterion, and just enough mass on the entries of $p$ that meet the first criterion.  
+
+To be exact, we'll say we accept with probability
+$
+  min(p(x)/q(x), 1)
+$
+Notice we always accept if $q(x) <= p(x)$. If the token is rejected, you sample from 
+$
+  f(x) prop p(x) - min(p(x), q(x))
+$
+
+We can analyze this with the law of total probability.
+$
+  P("Accept") = integral min(p(x)/q(x), 1) q(x) = C \
+  P("Accept")P(x | "Accept") = C(1/C min(p(x), q(x))) = min(p(x), q(x)) \
+  P("Reject")P(x | "Reject") = (1 - C)(p(x) - min(p(x), q(x)))/(1 - C) \
+  P(x) = p(x)
+$
+
+And that's the whole trick. Drafter models are typically distilled versions of targets with tweaks
+- They typically are given access to the target's hidden state for a few layers. Pioneered by Eagle. #urlcite("https://arxiv.org/abs/2401.15077", title: [EAGLE: Speculative Sampling Requires Rethinking Feature Uncertainty])
+- They are often not Attention-based. Recurrent models and Diffusion models are common. #urlcite("https://machinelearning.apple.com/research/recurrent-drafter", title: [Recurrent Drafter for Fast Speculative Decoding in Large Language Models]) #urlcite("https://arxiv.org/abs/2602.06036", title: [DFlash: Block Diffusion for Flash Speculative Decoding])
+
+The reason they're a bit different is because you want drafting to be low-overhead, so the drafter has to be tiny. Being small makes it hard to predict what the next few tokens are, hence access to hidden states, while the need for low-overhead motivates faster architectures.
+
+From what I've seen speculative decoding can get you to $<= 8$ expected tokens accepted. You can push this a little further by speculating branches or trees (e.g. predicting multiple possible sequences of tokens and during verification evaluate the LLM on all of them). #urlcite("https://arxiv.org/abs/2401.10774", title: [Medusa: Simple LLM Inference Acceleration Framework with Multiple Decoding Heads]) It's possible that the big labs have better speculators that can do much better than this.
+
+== Deployment
+Ok! We know all the tricks, now we need to figure out how to leverage multiple GPUs. Generally, there are three numbers people care about: Time-To-First-Token (TTFT), Time-Between-Tokens (TBT), and System Throughput. Some people even make a fourth called Goodput which is the Throughput you have for requests which satisfy your System-Level-Objectives (SLOs) essentially your "goals" for TTFT and TBT. #urlcite("https://arxiv.org/abs/2401.09670", title: [DistServe: Disaggregating Prefill and Decoding for Goodput-optimized Large Language Model Serving])
+
+=== Prefill and Decode Serving
+The cool thing about PD Disaggregation is we can use different parallelism configurations for the different phases. It's also worth nothing that training (which we haven't really discussed) is essentially the same as prefill so discussing prefill and decode sort of covers everything.
+
+Typically, _prefill will process far more tokens in a single batch than decode will_. This means as a general principle prefill is more okay with schemes that move weights, while decode would rather move activations around. Decode also just generally has a harder time hiding weight load overhead (this is bottlenecked by HBM not comms), so decode likes sharding weights and keeping them stationary. 
+
+Thus, Prefill is more amenable to strategies like FSDP, DWDP, DP and DPA, while Decode might prefer 2D Weight Stationary and TP. This isn't a hard rule, but it's useful intuition.
+
+The second major difference is there are far fewer queries during decode than there are during prefill, as mentioned before. This makes schemes where you move the queries, rather than the Keys, more attractive. For example, Context Parallel where you replicate the queries and keep the values in place (also called DCP or Decode Context Parallel) #urlcite("https://docs.sglang.io/docs/advanced_features/dcp", title: [SGLang Decode Context Parallelism]) and Ring Pass-Q which is a similar idea. Vanilla Context Parallelism is popular during prefill, as moving the KVs is amortized by all the work you are doing. Head Parallelism is popular in both configurations, but HP only goes so far, when you have a huge context and you need to process it faster than head sharding would allow, context parallelism is essentially your only choice.
+
+
+
+
 // TODO: = Serving
 // PD-Disagg, Attn-FFN disagg? Continuous-Batching, Chunked Prefill, Chunked Pipeline Parallelism, 
 // KV-cache radix / hash stratagies. Tiered caching with per-layer onload and offload, Attention Striping. 
 
 = Theory
 
-== Residual Stream
+== Residual Stream #urlcite("https://arxiv.org/abs/2002.04745", title: [On Layer Normalization in the Transformer Architecture])
 There's actually a very important decision lurking in how you hook up the residual stream.
 
 Should your model look like this?
@@ -951,7 +1122,7 @@ Or this?
   skip(<tap2>, <add2>),
 )))
 
-Consider the first setup (*Pre-Layer Norm*). The residual stream proceeds through the layers, incrementing its value with the outputs of the FFN and Attention blocks. Over the course of many layers, the residual stream will typically grow larger (this is similar to a random walk setup where you repeatedly add the same increment). This isn't _explosive_ growth (it's linear or sublinear depending on how correlated you think the increments are).
+Consider the first setup (*Pre-Layer Norm*). #urlcite("https://arxiv.org/abs/1607.06450", title: [Layer Normalization]) The residual stream proceeds through the layers, incrementing its value with the outputs of the FFN and Attention blocks. Over the course of many layers, the residual stream will typically grow larger (this is similar to a random walk setup where you repeatedly add the same increment). This isn't _explosive_ growth (it's linear or sublinear depending on how correlated you think the increments are).
 
 Now, what do the gradients look like? Let $Y_t$ be the residual stream after the $t$th FFN, and $X_t$ be the residual stream just before it. 
 
@@ -1053,7 +1224,7 @@ I'll update this section with *Post-Layer Norm* and some other ideas when I unde
 // Where $A$ is the overall layerwise attention matrix. From this analysis, it becomes clear that the gradient grows exponentially with depth for pre-norm, but only linearly for Residual Attention.
 
 == Critical Batch Size #urlcite("https://arxiv.org/pdf/1812.06162", title: [An Empirical Model of Large-Batch Training])
-The goal here is to try and derive from first principles what the optimal batch size should be. Assume that our loss is well-approximated locally by its second order Taylor expansion and let $G$ and $H$ indicate the true values of the gradient and hessian at $theta_0$. With step size $eta$ we have...
+The goal here is to try and derive from first principles what the optimal batch size should be. Assume that our loss is well-approximated locally by its second order Taylor expansion and let $G$ and $H$ indicate the true values of the gradient and Hessian at $theta_0$. With step size $eta$ we have...
 $
   L(theta) = L(theta_0) + eta G^top (-G) + eta^2/2 G^top H G + O(eta^3)
 $
@@ -1087,7 +1258,7 @@ $
 //   Tr(1/B E(epsilon_i A_i)G + 1/B E(A_i epsilon_i)G^top + 1/B^2 E(epsilon_i^top A_i epsilon_i))
 // $
 
-We solve for the best value of $eta$.
+We solve for the best value of $eta$. This is very important! You cannot fully capitalize on the less noisy reduction without a bigger step size.
 $
   0 = - norm(G)^2 + eta (G^top H G + 1/B Tr(H "Cov"(G_"sample"))) \
   eta = norm(G)^2 / (G^top H G + 1/B Tr(H "Cov"(G_"sample")))
@@ -1099,7 +1270,7 @@ $
   - norm(G)^4 / (2(G^top H G + 1/B Tr(H "Cov"(G_"sample"))))
 $
 
-Let's think about this $Tr(H "Cov"(G_"sample"))$ term, what does it mean, really? Well, if we write $G_"sample" = G + epsilon$, it's actually equivalent to $E(epsilon^top H epsilon)$, that is, the expected amount you would expect the loss to change if you went in random direction (the linear term in the taylor expansion contributes nothing in expectation). This is of course, highly dependent on the _local geometry_ of the loss function. If there are mainly positive curvature directions, noise hurts, if mainly negative, noise _helps_. This could partly explain the "over-smoothing" phenomenon, where batch sizes that are too large converge to worse optima; with less noise, it's harder to find negative curvature directions.
+Let's think about this $Tr(H "Cov"(G_"sample"))$ term, what does it mean, really? Well, if we write $G_"sample" = G + epsilon$, it's actually equivalent to $E(epsilon^top H epsilon)$, that is, the expected amount you would expect the loss to change if you went in a random direction (the linear term in the Taylor expansion contributes nothing in expectation). This is of course, highly dependent on the _local geometry_ of the loss function. If there are mainly positive curvature directions, noise hurts, if mainly negative, noise _helps_. This could partly explain the "over-smoothing" phenomenon, where batch sizes that are too large converge to worse optima; #urlcite("https://arxiv.org/abs/1609.04836", title: [On Large-Batch Training for Deep Learning: Generalization Gap and Sharp Minima]) with less noise, it's harder to find negative curvature directions.
 
 Now if we write 
 $
@@ -1114,3 +1285,71 @@ $
 Where the quantities in the numerators are what you would get under a pure gradient descent step without noise. So intriguingly, when $B_"noise"$ is high relative to $B$, both the optimal step size and the corresponding loss-decrease scale almost linearly with the batch size, while beyond $B = B_"noise"$ the gains start to rapidly attenuate.
 
 From this, it's clear that there is indeed some sort of "optimal batch size". Suppose I have a training step budget $T$ and some fixed amount of data $D$, such that $B T <= D$.  Large $B$ quickly eats through my dataset while suffering diminishing returns to minibatch size, while small $B$ quickly eats through my step budget. Somewhere in the middle yields efficient training.
+
+== Noisy Quadratic Model #urlcite("https://arxiv.org/pdf/1907.04164", title: "The Noisy Quadratic Model")
+Consider minimizing a convex quadratic centered at the origin with a positive diagonal Hessian.
+$
+  l(theta) = 1/2 theta^top H theta = sum_i 1/2 h_i theta_i^2 eq.delta sum_i l_i (theta) \
+$
+
+This is a very simple model but it's easy to analyze and gives good intuitions.
+
+A single noisy gradient is $g(theta) = H theta + sqrt(C) epsilon$, where $epsilon$ has mean-zero and unit covariance, independently at each step. We'll assume the noise covariance $C$ is diagonal. A fixed positive diagonal pre-conditioner $P$ is equivalent to using a per-index learning rate. With a global learning rate $eta$, define the effective learning rate $alpha_i = eta p_i^(-1)$:
+$
+  g_B (theta) = H theta + sqrt(C slash B) epsilon quad
+  theta(t + 1) = theta(t) - eta P^(-1) g_B (theta(t))
+$
+Here $c_i$ is the original gradient-noise variance. Everything separates coordinate-wise...
+$
+  theta_i (t + 1) = (1 - alpha_i h_i) theta_i (t) - alpha_i sqrt(c_i slash B) epsilon_i \
+  E(l_i (theta_i (t + 1))) = E(l_i ((1 - alpha_i h_i) theta_i (t) - alpha_i sqrt(c_i slash B) epsilon_i)) \
+  =_"Cross Terms Are Zero" E((1 - alpha_i h_i)^2 1/2 h_i theta_i^2 (t)) + E((alpha_i^2 c_i) / B 1/2 h_i epsilon_i^2) \
+  = (1 - alpha_i h_i)^2 E(l_i (theta_i (t))) + (alpha_i^2 c_i h_i)/(2 B)
+$
+
+Unrolling the recurrence gives
+$
+  E(l_i (theta_i (t))) = (1 - alpha_i h_i)^(2t) E(l_i (theta_i (0))) + sum_(k=0)^(t-1) (1 - alpha_i h_i)^(2k) (alpha_i^2 c_i h_i)/(2 B) \
+  sum_(k=0)^(t-1) (1 - alpha_i h_i)^(2k) = (1 - (1 - alpha_i h_i)^(2t))/(1 - (1 - alpha_i h_i)^2) \
+  = (1 - (1 - alpha_i h_i)^(2t))/(alpha_i h_i (2 - alpha_i h_i))
+$
+
+So
+$
+  E(l_i (theta_i (t))) = (1 - alpha_i h_i)^(2t) E(l_i (theta_i (0))) + (1 - (1 - alpha_i h_i)^(2t)) (alpha_i c_i)/(2 B (2 - alpha_i h_i))
+$
+
+Provided $0 < alpha_i h_i < 2$, we converge exponentially fast to the steady-state risk:
+$
+  (alpha_i c_i)/(2 B (2 - alpha_i h_i))
+$
+
+This model also yields a critical batch size. Let $r_i (t) eq.delta E(l_i (theta_i (t)))$ and $r(t) = sum_i r_i (t)$. Substituting $alpha_i = eta p_i^(-1)$ and summing over coordinates gives the change in the entire expected loss:
+$
+  r(t + 1) - r(t) = sum_i ((1 - eta p_i^(-1) h_i)^2 - 1) r_i (t) + eta^2/(2 B) sum_i p_i^(-2) c_i h_i \
+  = -2 eta sum_i p_i^(-1) h_i r_i (t) + eta^2 sum_i p_i^(-2) h_i^2 r_i (t) + eta^2/(2 B) sum_i p_i^(-2) c_i h_i
+$
+
+Optimizing this one-step loss change with respect to the single global learning rate $eta$...
+$
+  -2 sum_i p_i^(-1) h_i r_i (t) + 2 eta sum_i p_i^(-2) h_i^2 r_i (t) + eta/B sum_i p_i^(-2) c_i h_i = 0 \
+  eta^star = (sum_i p_i^(-1) h_i r_i (t))/(sum_i p_i^(-2) h_i^2 r_i (t) + (sum_i p_i^(-2) c_i h_i) slash (2 B))
+$
+
+This is exactly the same form we got before. Define
+$
+  B_"noise" = (sum_i p_i^(-2) c_i h_i)/(2 sum_i p_i^(-2) h_i^2 r_i (t))
+$
+Then
+$
+  eta^star = (sum_i p_i^(-1) h_i r_i (t))/(sum_i p_i^(-2) h_i^2 r_i (t)) 1/(1 + B_"noise" slash B)
+$
+Substituting this back into the total loss change gives
+$
+  r(t + 1) - r(t) = - (sum_i p_i^(-1) h_i r_i (t))^2/(sum_i p_i^(-2) h_i^2 r_i (t)) 1/(1 + B_"noise" slash B)
+$
+
+So, what can this model teach us? We can read off a few things
+- Stability under a fixed learning rate requires $0 < eta < 2 slash (max_i (h_i slash p_i))$. Thus, stability is governed by the maximum eigenvalue of the preconditioned Hessian, known as the sharpness.
+- The one-step critical batch size depends on the noise and current risks as well as the pre-conditioner. As the preconditioner is one of the main things that varies optimizer to optimizer, we can conclude the critical batch size is optimizer-dependent.
+- The asymptotic risk shrinks with the batch size, and grows with the step size, noise, and curvature.
