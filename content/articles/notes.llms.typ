@@ -391,6 +391,21 @@ With LLMs, one of the easiest ways to improve performance is scaling the number 
 
 You can also make experts which all tokens are routed to, called _shared_ experts, with the thinking being it avoids redundant computation across experts. #urlcite("https://arxiv.org/abs/2401.06066", title: [DeepSeekMoE: Towards Ultimate Expert Specialization in Mixture-of-Experts Language Models])
 
+// = Hardware
+// Historically, hardware was an after-thought in machine learning, in much the same way that constant factors were for theoretical computer scientists. These days, where we have seen clear empirical returns to sheer compute and data scaling, the narrative has reversed. An algorithmic innovation could be completely dismissed if it doesn't lend itself to a hardware-efficient implementation. Many architectural decisions in LLMs were strongly motivated by the need to run efficiently on today's chips!
+
+// Let's dig into some of the principles behind making good use of modern hardware.
+
+// == Compute vs. Memory Bandwidth
+// Most modern chips can do matrix multiplication far faster than they can move data from off-chip memory (cheap and large) to on-chip memory (expensive, fast, and far closer to the arithmetic units). How do you keep your arithmetic units saturated, if your memory units are so slow? The trick is you need to do a lot of work for every byte you read in.
+
+// Consider a matrix multiplication. The goal is to compute $A[M, K] times B[K, N] = C[M, N]$. The required number of arithmetic operations is $2 M N K$, for every output element we compute a dot-product between two $k$ dimensional vectors costing $k$ additions and $k$ multiplies. The required amount of memory we read is $M K + K N$ and the amount we write is $M N$. Thus, the amount of arithmetic per element is 
+// $
+//   (M N K)/(M K + K N + M N)
+// $
+
+// Thus, the amount of arithmetic grows asymptotically faster than the amount of memory, which is good! It means we can avoid getting bottlenecked by the speed of memory loads.
+
 = Scaling #urlcite("https://jax-ml.github.io/scaling-book/", title: [The Jax Scaling Book])
 When you start making models bigger, you quickly start running into a lot of performance bottlenecks. Your main avenue for addressing them is to somehow share the load across more and more GPUs, but this is non-trivial as naive approaches will bottleneck the model computation on communicating between GPUs. This motivates a lot of interesting parallelism strategies.
 

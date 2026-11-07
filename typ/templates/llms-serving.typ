@@ -198,7 +198,8 @@
     p(x) + 5 * t * (1 - t) * (2 * t - 1)
   }
   let plot(part: "overlay", width: 374, height: 88, ymax: 1.7) = cetz.canvas(length: 1pt, {
-    import cetz.draw: line, content
+    // Avoid Tinymist tracing a runtime import through the whole document.
+    let (line, content) = (cetz.draw.line, cetz.draw.content)
     let points(f, lo: 0, hi: 1) = range(161).map(i => {
       let x = lo + (hi - lo) * i / 160
       (width * x, height * f(x) / ymax)
