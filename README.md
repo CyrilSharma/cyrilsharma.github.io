@@ -99,6 +99,20 @@ Renderable files use the blog template:
 - `src/consts.ts,src/components/BaseHead.astro`: global metadata and the head component.
 - `src/styles/*`: CSS styles.
 
+### Google Analytics
+
+The GA4 web stream measurement ID is configured in `src/site.mjs` as
+`GOOGLE_ANALYTICS_ID`. An empty ID disables tracking. The build adds the same
+tag to every HTML page, including standalone sites copied from `public/` such
+as `/curvytron-rl/`, so republishing the game preserves tracking. Tracking runs
+only on `cyrilsharma.github.io`; localhost and other preview hosts are excluded.
+Google signals and advertising personalization are disabled.
+
+In [Google Analytics](https://analytics.google.com/), use the **Pages and screens**
+report with **Page path and screen class** to compare views and active users by
+page. Filter the path to `/curvytron-rl/` for the game. **Realtime** shows recent
+activity. Collection starts after deployment; earlier visits are not backfilled.
+
 ### Paragraph justification
 
 Justif enhances justified article paragraphs and simple list items on desktop.

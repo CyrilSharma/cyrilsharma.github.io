@@ -8,7 +8,8 @@ import fs from "node:fs";
 import { spawn } from "node:child_process";
 import * as cheerio from "cheerio";
 
-import { BASE_PATH } from "./src/site.mjs";
+import { BASE_PATH, GOOGLE_ANALYTICS_ID } from "./src/site.mjs";
+import googleAnalytics from "./src/integrations/google-analytics.mjs";
 
 const meta = JSON.parse(fs.readFileSync("./meta.json", "utf8"));
 const rawPages = meta
@@ -21,6 +22,10 @@ export default defineConfig({
   base: BASE_PATH || "/",
 
   integrations: [
+    googleAnalytics({
+      measurementId: GOOGLE_ANALYTICS_ID,
+      hostname: "cyrilsharma.github.io",
+    }),
     {
       name: "preload-justification",
       hooks: {
