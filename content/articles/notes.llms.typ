@@ -847,13 +847,6 @@ This becomes advantageous relative to EP when moving the weights has less memory
 
 == Synthesis
 
-#let scaling-table(..args) = {
-  let body = table(..args)
-  context if std.target() == "html" {
-    html.elem("div", attrs: ("style": "overflow-x: auto;"), body)
-  } else { body }
-}
-
 The costs per GPU, for a balanced forward pass. Traffic is measured in tensor elements not bytes.
 
 *Storage vs. HBM Traffic:* storage is how memory you need per GPU, HBM traffic counts reads and writes during the pass. HBM Traffic can be larger than storage, for example FSDP can store $O(D F slash P)$ weights per GPU while loading $O(D F)$ gathered weights per pass. #urlcite("https://jax-ml.github.io/scaling-book/roofline/", title: [All About Rooflines])
@@ -869,7 +862,7 @@ Ignoring projections. $C_a = B G H S L d_h$, $M_q = B G H S d_h$, $M_(k v) = 2 B
 #{
   set text(size: 9pt)
   set par(justify: false)
-  scaling-table(
+  table(
     columns: (1.05fr, 0.95fr, 1.3fr, 1.7fr),
     inset: 5pt,
     stroke: 0.4pt + rgb("ccd4de"),
@@ -895,7 +888,7 @@ Ignoring projections. $C_a = B G H S L d_h$, $M_q = B G H S d_h$, $M_(k v) = 2 B
 #{
   set text(size: 9pt)
   set par(justify: false)
-  scaling-table(
+  table(
     columns: (1.05fr, 0.95fr, 1.3fr, 1.7fr),
     inset: 5pt,
     stroke: 0.4pt + rgb("ccd4de"),
@@ -923,7 +916,7 @@ $E$ experts, $E_a$ touched globally, $k$ selected per token.
 #{
   set text(size: 9pt)
   set par(justify: false)
-  scaling-table(
+  table(
     columns: (1.05fr, 0.95fr, 1.3fr, 1.7fr),
     inset: 5pt,
     stroke: 0.4pt + rgb("ccd4de"),
