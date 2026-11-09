@@ -176,7 +176,8 @@
 #let columns = mcolumns
 #let colbreak = mcolbreak
 
-#let html_rules(body) = {
+#let html_rules(body) = context {
+  let body-text-size = text.size
   let theme = "light"
   let (
     style: theme-style,
@@ -188,6 +189,13 @@
   ) = book-theme-from(toml("theme-style.toml"), xml: it => xml(it), target: theme)
 
   show link: set text(fill: dash-color)
+  // Keep native table text and SVG equations at the table's Typst text size.
+  show table: it => context if std.target() == "html" {
+    html.elem("div", attrs: (
+      "class": "typst-table",
+      "style": "font-size: " + str(text.size / body-text-size) + "em;",
+    ), it)
+  } else { it }
   show align: it => context if shiroa-sys-target() == "html" {
     let h-align = "center";
     if it.alignment.x == left {

@@ -204,6 +204,20 @@ table {
   max-height: 100% !important;
 }
 
+.prose .typst-table {
+  overflow-x: auto;
+}
+
+/* Wide equations set the cell's minimum width instead of shrinking independently. */
+.prose .typst-table .inline-equation {
+  min-width: max-content;
+}
+
+.prose .typst-table .inline-equation svg {
+  max-width: none !important;
+  margin-top: 0;
+}
+
 th, td {
   padding: 0.75em 1em;
   text-align: left;
