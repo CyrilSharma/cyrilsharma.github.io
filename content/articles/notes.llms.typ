@@ -1067,7 +1067,7 @@ First if $q(x) > p(x)$, then we can't always accept, otherwise no matter how do 
 $
   cases(p(x) &"if" p(x) <= q(x), p(x) - q(x) &"if" p(x) > q(x))
 $
-You can check this works using the law of total probability. This is the approach we've found that's a big improvement over exact matching. However, we unconditionally reject if $q(x) > p(x)$, which is problematic because even similar $q$ and $p$ could end up rejecting frequently...
+You can check this works using the law of total probability. This is the first approach we've found that's a big improvement over exact matching. However, we unconditionally reject if $q(x) > p(x)$, which is problematic because even similar $q$ and $p$ could end up rejecting frequently...
 
 === Attempt 4
  One simple observation is instead of unconditionally rejecting you can just accept with probability $p(x) slash q(x)$. Thus, the odds of accepting a token never exceeds $q(x) times p(x) slash q(x) = p(x)$. The new backup distribution becomes
