@@ -725,12 +725,11 @@ Unlike the previous scheme, which was mainly there for memory savings, here we'v
 === 2D Weight Stationary
 What if we shard the weights along $F$ and $D$, but keep the weights stationary?
 $
-  underline(X[B, S, D_(X Y)] times_D W_"up" [D_X, F_Y] times_F W_"down" [F_Y, D_X] => O[B, S, D_(X Y)]) \
-  "AllGather"_(Y)(X[B, S, D_(X Y)]) = X[B, S, D_X]\
+  underline(X[B, S, D_X] times_D W_"up" [D_X, F_Y] times_F W_"down" [F_Y, D_X] => O[B, S, D_X]) \
   X[B, S, D_X] times_D W_"up" [D_X, F_Y] = A[B, S, F_Y]{U_X}\
   "AllReduce"_X (A[B, S, F_Y]{U_X}) = A[B, S, F_Y] \
   A[B, S, F_Y] times_F W_"down" [F_Y, D_X] = O[B, S, D_X]{U_Y} \
-  "ReduceScatter"_Y (O[B, S, D_X]{U_Y}) = O[B, S, D_(X Y)]
+  "AllReduce"_Y (O[B, S, D_X]{U_Y}) = O[B, S, D_X]
 $
 Let's look at how much communication this scheme requires. Denote $bold(X) = |X|$. The total cost is
 $
@@ -766,7 +765,7 @@ $
 
 Balancing terms and solving...
 $
-  F / bold(Y) = (B S) / bold(X) => bold(X) = (B S bold(Y))/F quad => bold(X) = sqrt((B S P) / F) \ 
+  F / bold(Y) = (B S) / bold(X) => bold(X) = (B S bold(Y))/F => bold(X) = sqrt((B S P) / F) \ 
   "Comms" = (4 D sqrt(B S F)) / sqrt(P)
 $
 
