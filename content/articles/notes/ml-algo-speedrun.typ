@@ -1,6 +1,6 @@
 #import "/typ/templates/blog.typ": *
 #show: main.with(
-  title: "Ml Algo Speedrun",
+  title: "ML Algo Speedrun",
   desc: "",
   date: "2026-11-24T10:19:18-05:00",
   tags: ("ml",),
