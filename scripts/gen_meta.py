@@ -3,7 +3,7 @@
 Generate a meta.json file by querying Typst frontmatter.
 
 Usage:
-  uv run scripts/gen_meta.py --out meta.json --root . --features html content/articles/blog.foo.typ ...
+  uv run scripts/gen_meta.py --out meta.json --root . --features html content/articles/blog/foo.typ ...
 """
 
 import argparse
@@ -69,12 +69,10 @@ def main(argv) -> int:
   out_path.parent.mkdir(parents=True, exist_ok=True)
 
   def article_identity(path: Path):
-    name = path.stem
-    if "." not in name:
-      raise ValueError(f"Article filename must be <section>.<slug>.typ: {path}")
-    section, slug = name.split(".", 1)
-    if not section or not slug:
-      raise ValueError(f"Article filename must be <section>.<slug>.typ: {path}")
+    relative = path.resolve().relative_to((root / "content/articles").resolve())
+    if len(relative.parts) != 2 or relative.parts[0] not in ("blog", "notes") or path.suffix != ".typ":
+      raise ValueError(f"Article path must be content/articles/<section>/<slug>.typ: {path}")
+    section, slug = relative.parts[0], path.stem
     return section, slug
 
   meta = []

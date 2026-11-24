@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 import questionary
 import datetime, os, re, sys
-ARTICLE_DIR = "./content/articles"
+from pathlib import Path
+ARTICLE_DIR = "content/articles"
 SECTIONS = ("blog", "notes")
 
 def iso_timestamp():
@@ -12,23 +13,21 @@ def list_drafts():
     if not os.path.isdir(ARTICLE_DIR):
         return []
     files = [
-        (os.path.getmtime(p := os.path.join(ARTICLE_DIR, f)), f, p)
-        for f in os.listdir(ARTICLE_DIR) if f.endswith(".typ")
+        (p.stat().st_mtime, p.relative_to(ARTICLE_DIR).as_posix(), str(p))
+        for folder in (Path(ARTICLE_DIR), *(Path(ARTICLE_DIR) / section for section in SECTIONS))
+        for p in folder.glob("*.typ") if p.is_file()
     ]
     files.sort(reverse=True)
     return files
 
 def split_article_name(fname):
-    stem = fname[:-4]
-    for section in SECTIONS:
-        prefix = f"{section}."
-        if stem.startswith(prefix):
-            return section, stem[len(prefix):]
-    return None, stem
+    path = Path(fname)
+    section = path.parent.name if path.parent.name in SECTIONS else None
+    return section, path.stem
 
 def find_published(slug):
     for section in SECTIONS:
-        path = f"{ARTICLE_DIR}/{section}.{slug}.typ"
+        path = f"{ARTICLE_DIR}/{section}/{slug}.typ"
         if os.path.exists(path):
             return section, path
     return None, None
@@ -118,8 +117,8 @@ def main():
             if tags:
                 break
             print("At least one tag is required.")
-        os.makedirs(ARTICLE_DIR, exist_ok=True)
-        dest_path = f"{ARTICLE_DIR}/{section}.{slug}.typ"
+        os.makedirs(f"{ARTICLE_DIR}/{section}", exist_ok=True)
+        dest_path = f"{ARTICLE_DIR}/{section}/{slug}.typ"
 
     # Build canonical content from local source + resolved metadata
 

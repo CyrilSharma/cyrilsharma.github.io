@@ -86,11 +86,10 @@ export default defineConfig({
           }
 
           const ARTICLE_DIR = "content/articles";
-          const articlePath = (section, slug) => `${ARTICLE_DIR}/${section}.${slug}.typ`;
+          const articlePath = (section, slug) => `${ARTICLE_DIR}/${section}/${slug}.typ`;
           const articleIdentity = (file) => {
-            if (!file.endsWith(".typ") || !file.includes(`/${ARTICLE_DIR}/`)) return null;
-            const name = path.basename(file, ".typ");
-            const match = name.match(/^(blog|notes)\.(.+)$/);
+            const relative = path.relative(path.resolve(ARTICLE_DIR), path.resolve(file)).split(path.sep).join("/");
+            const match = relative.match(/^(blog|notes)\/([^/]+)\.typ$/);
             return match ? { section: match[1], slug: match[2] } : null;
           };
 
@@ -98,8 +97,7 @@ export default defineConfig({
           server.watcher.add(`./${ARTICLE_DIR}`);
 
           server.watcher.on("add", (file) => {
-            if (!file.endsWith(".typ")) return;
-            if (!file.includes(`/${ARTICLE_DIR}/`)) return;
+            if (!articleIdentity(file)) return;
             console.log(`[make] new file detected: ${file}, running make...`);
             const proc = spawn("make", [], { stdio: "inherit" });
             proc.on("exit", (code) => {

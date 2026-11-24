@@ -6,7 +6,7 @@
   tags: ("musings",),
 )
 
-#figure[#align(center)[#image("../img/brain.jpg", width: 50%)]]
+#figure[#align(center)[#image("/content/img/brain.jpg", width: 50%)]]
 + Does our current set of physical laws predict consciousness, or are we missing laws?
 + What is the smallest collection of atoms that can be conscious?
 + Suppose you have someone whose two brain halves are _completely_ separate. Is each half conscious? #footnote[Note that despite all the intriguing experimental results, split-brain patients only exhibit a single will, so presumably they have only a single consciousness.] What degree of connectivity do you need between the two halves to get one consciousness instead of two? Why isn't any contiguous subset of neurons conscious?

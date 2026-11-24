@@ -516,7 +516,7 @@ $
 $ 
 
 #align(center, image(
-  "../img/collective-primitives.gif",
+  "/content/img/collective-primitives.gif",
   width: 100%,
   alt: "Animated comparison of AllGather, ReduceScatter, AllReduce, and AllToAll across four fully connected GPUs, showing data transfers, reductions, final layouts, and bytes sent per GPU.",
 ))
@@ -541,7 +541,7 @@ The easiest case is where you gather an existing tensor, say a weight tensor or 
 Sometimes though, you need to gather a tensor which was just made: an activation tensor during the FWD, a gradient tensor during the BWD. Overlap in this case requires more fine-grained cooperation. The technique needed is called a Collective GEMM. #urlcite("https://arxiv.org/abs/2406.06858", title: [FLUX: Fast Software-based Communication Overlap On GPUs Through Kernel Fusion]) Let's go through some cases.
 
 #align(center, image(
-  "../img/collective-gemms.gif",
+  "/content/img/collective-gemms.gif",
   width: 100%,
   alt: "Animated collective GEMM examples: gather weight slices and compute output columns; stream partial outputs through a ring reduction; reduce input rows before multiplying them; and pull routed batch and sequence chunks for immediate computation.",
 ))
