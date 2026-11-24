@@ -2,10 +2,9 @@
 #show: main.with(
   title: "Ml Algo Speedrun",
   desc: "",
-  date: "2026-11-23T22:33:46-05:00",
+  date: "2026-11-24T10:19:01-05:00",
   tags: ("ml",),
 )
-
 == KL
 #let kl = "KL"
 The KL is defined as the following quantity
