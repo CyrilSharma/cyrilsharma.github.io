@@ -59,6 +59,7 @@ def changed_article_files(source_sha, paths=None):
         "git",
         "diff",
         "--name-only",
+        "--no-renames",
         "--diff-filter=ACMRD",
         f"{LIVE_BRANCH}..{source_sha}",
         "--",
@@ -97,8 +98,6 @@ def uncommitted_non_article_files():
 
 def title_for(path):
     name = os.path.basename(path).removesuffix(".typ")
-    if "." in name:
-        name = name.split(".", 1)[1]
     return name.replace("-", " ").replace("_", " ").title()
 
 

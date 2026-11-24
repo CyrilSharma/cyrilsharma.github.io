@@ -27,8 +27,6 @@ def main():
     titles = []
     for f in selected:
         name = f.split("/")[-1].replace(".typ", "")
-        if "." in name:
-            name = name.split(".", 1)[1]
         titles.append(name.replace("-", " ").title())
     msg = args.message or "Publish: " + ", ".join(titles)
 

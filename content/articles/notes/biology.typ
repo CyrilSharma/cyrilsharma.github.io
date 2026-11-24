@@ -405,7 +405,7 @@ This has lead to a pretty cool piece of biotech: modify the antigens of a given 
 
 == Nucleic Acids
 The three ingredients of a nuclear acid are a sugar (Ribose or 2-Deoxyribose), a Phosphate, and a nuclear base.
-#align(center, image("../img/nucleic-acids.png", width: 100%))
+#align(center, image("/content/img/nucleic-acids.png", width: 100%))
 
 Nucleic acids are used for more than just DNA. ATP and GTP are made with almost the same recipe as a Nucleic acid.
 
@@ -540,7 +540,7 @@ The process looks like this. Part of the Ribosome finds a start codon and latche
 / Mitosis: Asexual Cellular Reproduction
 / Meiosis: Sexual Cellular Reproduction
 
-#align(center, image("../img/mitosis_and_meosis.png"))
+#align(center, image("/content/img/mitosis_and_meosis.png"))
 The main difference between Meiosis 1 and Meiosis 2 is that phase 1 has homologous chromosomes (the same gene from different parents) pair up followed by potential genetic exchange (crossovers), while phase 2 has the sister chromosomes (two previously identical chromosomes) pair up.
 
 It should be noted that which homologue ends up in which cell is random. Hence, it would be extremely unlikely for all the father's homologues to separate in one cell and all the mother's homologues to separate in the other.
@@ -568,7 +568,7 @@ $
 
 You expect the organism to either be dominant in all traits or recessive in all traits, hence if its dominant in some and recessive in others, you immediately know which crossover event happened.
 
-#align(center, image("../img/XLinked.jpg"))
+#align(center, image("/content/img/XLinked.jpg"))
 
 Mendelian inheritance can cause some interesting patterns. For one, traits often skip a generation. This is because the original generation might have only one copy of a recessive gene, hence none of their direct descents can have the recessive trait. Furthermore, traits can be sex-linked (e.g. primarily males or females are affected), if the alleles in question happen to live on the X-chromosome like in the above example.
 
@@ -582,7 +582,7 @@ Mendelian inheritance can cause some interesting patterns. For one, traits often
 + Apply selection pressure, such that only the Bacteria which have the DNA fragment you're interested in survive.
 
 === PCR
-#align(center, image("../img/PCR.jpg"))
+#align(center, image("/content/img/PCR.jpg"))
 This is an amplification based approach. The idea is by dumping in the appropriate primers, you can get DNA polymerase to replicate the DNA strand of interest twice, while everything else only gets replicated once. After several iterations of this, the stuff left in solution is primarily made up of the DNA sequence you're actually interested in.
 
 === CRISPR

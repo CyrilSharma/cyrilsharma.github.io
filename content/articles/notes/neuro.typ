@@ -64,7 +64,7 @@ Here's my understanding of this. Human memory takes as input a situation, and ou
 Engrams become more sparse over time.
 #notefig[
   #figure(
-    image("../img/Retrieval.png", format: "png", width: 75%),
+    image("/content/img/Retrieval.png", format: "png", width: 75%),
     supplement: none
   )
 ]
@@ -78,7 +78,7 @@ Prolonged spiking activity is interesting, because it implies a single input can
 
 #notefig[
   #figure(
-    image("../img/Hodgkin-Huxley.svg", format: "png", width: 50%),
+    image("/content/img/Hodgkin-Huxley.svg", format: "png", width: 50%),
     caption:[The lipid bilayer is represented as a capacitance ($C_m$). Voltage-gated and leak ion channels are represented by nonlinear ($g_n$) and linear ($g_L$) conductances, respectively. The electrochemical gradients driving the flow of ions are represented by batteries ($E$), and ion pumps and exchangers are represented by current sources ($I_p$).],
     supplement: none
   )

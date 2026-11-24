@@ -546,7 +546,7 @@ I think this proof gives really great intuition for the $1/k$ rate, but unfortun
   // Again, a slightly worse result then it is possible to prove.
 ]
 
-#align(image("../img/bowl_trajectory_1_20.png"))
+#align(image("/content/img/bowl_trajectory_1_20.png"))
 This $alpha slash beta$ term is interesting. It's called the condition number of the problem. The intuitive reason for what this represents is the maximum difference in curvature between different directions. If you have a fixed step size, you have to make your step size small enough to deal with the maximum curvature regions. However, this means you move very slowly along the minimum curvature regions (shown above). Dealing with this problem is why momentum and higher-order methods were developed!
 
 == Subgradient Methods

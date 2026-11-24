@@ -68,13 +68,13 @@ Install suggseted extensions:
 ## Writing
 
 Write new drafts in `content/articles`. Plain files in that folder are ignored by
-the build until `just publish` turns them into article files.
+the build until `just publish` moves them into a section folder.
 
-Published article filenames use `<section>.<slug>.typ`, for example:
+Published articles live in section folders, for example:
 
 ```text
-content/articles/blog.personal-info.typ
-content/articles/notes.linear-algebra.typ
+content/articles/blog/personal-info.typ
+content/articles/notes/linear-algebra.typ
 ```
 
 Renderable files use the blog template:
