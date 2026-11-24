@@ -2,7 +2,7 @@
 #show: main.with(
   title: "Ml Algo Speedrun",
   desc: "",
-  date: "2026-11-24T10:19:01-05:00",
+  date: "2026-11-24T10:19:18-05:00",
   tags: ("ml",),
 )
 == KL
